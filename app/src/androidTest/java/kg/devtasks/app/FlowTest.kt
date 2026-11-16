@@ -99,6 +99,10 @@ class FlowTest {
         first = FakeBase("Исправить печатную форму счёта", "oneC-a", "password-a")
         second = FakeBase("Задача другой базы", "oneC-b", "password-b")
         scenario = ActivityScenario.launch(MainActivity::class.java)
+        scenario.onActivity {
+            it.state.localAuth = true
+            it.render()
+        }
         waitText("Вход в приложение")
     }
 

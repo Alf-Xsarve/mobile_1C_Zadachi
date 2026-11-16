@@ -87,7 +87,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "devtasks.db", nu
                     if (c.moveToFirst()) PasswordProof(c.getBlob(0), c.getBlob(1), c.getInt(2))
                     else null
                 }
-        if (proof == null || !passwords.verify(password, proof))
+        if (proof == null || proof.iterations <= 0 || !passwords.verify(password, proof))
             throw UserError("Неверный логин или пароль приложения.")
         return findUser(normalized)!!
     }
@@ -99,6 +99,24 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "devtasks.db", nu
                 if (it.moveToFirst()) User(it.getString(0), it.getString(1), it.getString(2))
                 else null
             }
+
+    // Пароль облачного аккаунта проверяет Firebase; локально он не сохраняется.
+    fun cloudUser(firebaseUid: String, email: String, name: String): User {
+        val id = "firebase:$firebaseUid"
+        val user = User(id, canonical(email), name)
+        val values =
+            ContentValues().apply {
+                put("id", id)
+                put("login", user.login)
+                put("name", user.name)
+                put("salt", byteArrayOf())
+                put("hash", byteArrayOf())
+                put("rounds", 0)
+            }
+        if (user(id) == null) writableDatabase.insertOrThrow("accounts", null, values)
+        else writableDatabase.update("accounts", values, "id=?", arrayOf(id))
+        return user
+    }
 
     fun setting(key: String): String? =
         readableDatabase.rawQuery("SELECT data FROM settings WHERE key=?", arrayOf(key)).use {

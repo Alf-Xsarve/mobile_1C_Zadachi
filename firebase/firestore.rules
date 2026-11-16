@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function authenticated() { return request.auth != null; }
+    function actorName() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name;
+    }
+    match /users/{uid} {
+      allow get: if authenticated() && request.auth.uid == uid;
+      allow create: if authenticated() && request.auth.uid == uid
+        && request.resource.data.keys().hasAll(['name', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['name', 'createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
+        && request.resource.data.createdAt == request.time;
+      allow list, update, delete: if false;
+    }
+    match /tasks/{taskId} {
+      allow read: if authenticated();
+      allow create: if authenticated()
+        && request.resource.data.keys().hasAll(['title', 'description', 'status', 'authorId', 'authorName', 'assigneeId', 'assigneeName', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['title', 'description', 'status', 'authorId', 'authorName', 'assigneeId', 'assigneeName', 'createdAt', 'updatedAt'])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 3 && request.resource.data.title.size() <= 160
+        && request.resource.data.description is string && request.resource.data.description.size() <= 10000
+        && request.resource.data.status == 'new'
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.authorName == actorName()
+        && request.resource.data.assigneeId == '' && request.resource.data.assigneeName == ''
+        && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
+      allow update: if authenticated()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'assigneeId', 'assigneeName', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && (
+          (resource.data.status == 'new' && resource.data.assigneeId == ''
+            && request.resource.data.status == 'active'
+            && request.resource.data.assigneeId == request.auth.uid
+            && request.resource.data.assigneeName == actorName())
+          || (resource.data.status == 'active' && resource.data.assigneeId == request.auth.uid
+            && request.resource.data.status == 'done'
+            && request.resource.data.assigneeId == resource.data.assigneeId
+            && request.resource.data.assigneeName == resource.data.assigneeName)
+        );
+      allow delete: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

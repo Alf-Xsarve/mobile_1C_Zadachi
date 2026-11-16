@@ -54,7 +54,8 @@ class MainActivity : Activity() {
             state.theme == "dark" ||
                 (state.theme == "system" && resources.configuration.uiMode and 48 == 32)
         setTheme(if (dark) android.R.style.Theme_Material_NoActionBar else R.style.AppTheme)
-        val key = "${state.user?.id}:${state.page}:${state.tab}:${state.detailId}"
+        val key =
+            "${state.user?.id}:${state.page}:${state.tab}:${state.detailId}:${state.cloud.selectedId}:${state.cloud.draft?.id}"
         val oldScroll =
             if (key == shown)
                 findViewById<android.view.ViewGroup>(android.R.id.content)

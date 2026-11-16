@@ -18,7 +18,12 @@ data class Editor(
     var error: String? = null,
 )
 
-class AppState(context: Context) {
+class AppState(
+    context: Context,
+    cloudFactory: (Context, () -> Unit) -> FirebaseTasks = { app, changed ->
+        FirebaseTasks(app, changed)
+    },
+) {
     val store = LocalStore(context.applicationContext)
     private val pool =
         object :
@@ -78,12 +83,23 @@ class AppState(context: Context) {
     val offsets = mutableMapOf<String, Int>()
     val more = mutableMapOf<String, Boolean>()
     val working = mutableSetOf<String>()
+    val cloud = cloudFactory(context.applicationContext) { notifyUi() }
+    var localAuth = !cloud.configured
 
     init {
         job(
             {
                 val uid = store.setting("session")
                 uid?.let { store.user(it) }
+                    ?: cloud.account?.let {
+                        store
+                            .cloudUser(
+                                it.uid,
+                                it.email.orEmpty(),
+                                it.displayName?.ifBlank { null } ?: it.email.orEmpty(),
+                            )
+                            .also { user -> store.setting("session", user.id) }
+                    }
             },
             { u ->
                 boot = false
@@ -137,6 +153,44 @@ class AppState(context: Context) {
 
     fun auth() {
         if (busy) return
+        if (cloud.configured && !localAuth) {
+            if (cloud.busy) return
+            busy = true
+            error = null
+            cloud.authenticate(registering, authLogin, authPassword, authName, authRepeat) { ok ->
+                if (!ok) {
+                    busy = false
+                    error = cloud.error
+                    notifyUi()
+                } else {
+                    val identity = cloud.account!!
+                    job(
+                        {
+                            val u =
+                                store.cloudUser(
+                                    identity.uid,
+                                    identity.email.orEmpty(),
+                                    cloud.profileName,
+                                )
+                            store.setting("session", u.id)
+                            u
+                        },
+                        { u ->
+                            busy = false
+                            authPassword = ""
+                            authRepeat = ""
+                            openUser(u)
+                        },
+                        {
+                            busy = false
+                            error = message(it)
+                        },
+                    )
+                }
+            }
+            notifyUi()
+            return
+        }
         busy = true
         error = null
         notifyUi()
@@ -206,6 +260,7 @@ class AppState(context: Context) {
                 epoch++
                 clients.values.forEach { it.close() }
                 clients.clear()
+                cloud.signOut()
                 user = null
                 registering = false
                 authName = ""
@@ -583,6 +638,17 @@ class AppState(context: Context) {
     }
 
     fun back(): Boolean {
+        if (page == "cloud") {
+            if (cloud.busy) return true
+            when {
+                cloud.draft != null -> cloud.draft = null
+                cloud.selectedId != null -> cloud.selectedId = null
+                else -> page = "home"
+            }
+            cloud.error = null
+            notifyUi()
+            return true
+        }
         if (editor?.busy == true) return true
         return when (page) {
             "detail" -> {
@@ -615,6 +681,7 @@ class AppState(context: Context) {
         epoch++
         render = null
         clients.values.forEach { it.close() }
+        cloud.close()
         pool.shutdownNow()
         /* SQLite держит собственный пул до завершения фоновых транзакций. */ }
 }

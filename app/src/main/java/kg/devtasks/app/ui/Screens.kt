@@ -20,6 +20,7 @@ class Screens(val a: MainActivity, val u: Ui) {
         }
         if (s.user == null) return auth(root)
         when (s.page) {
+            "cloud" -> CloudScreens(a, u).render(root)
             "editor" -> editor(root)
             "sources" -> sources(root)
             "detail" -> detail(root)
@@ -55,7 +56,14 @@ class Screens(val a: MainActivity, val u: Ui) {
             u.text(if (s.registering) "Создать учётную запись" else "Вход в приложение", 20f, true)
         )
         if (s.registering) card.addView(u.input("Ваше имя", s.authName) { s.authName = it })
-        card.addView(u.input("Логин приложения", s.authLogin) { s.authLogin = it })
+        card.addView(
+            u.input(
+                if (s.cloud.configured && !s.localAuth) "Email" else "Логин приложения",
+                s.authLogin,
+            ) {
+                s.authLogin = it
+            }
+        )
         card.addView(u.input("Пароль приложения", s.authPassword, true) { s.authPassword = it })
         if (s.registering)
             card.addView(u.input("Повторите пароль", s.authRepeat, true) { s.authRepeat = it })
@@ -78,11 +86,34 @@ class Screens(val a: MainActivity, val u: Ui) {
             }
         )
         content.addView(card)
-        u.note(content, s.error)
+        if (s.cloud.configured && !s.localAuth && !s.registering)
+            content.addView(
+                u.button("Восстановить пароль", !s.busy, true) {
+                    s.error = null
+                    s.cloud.email = s.authLogin
+                    s.cloud.resetPassword()
+                }
+            )
+        if (s.cloud.configured)
+            content.addView(
+                u.button(
+                    if (s.localAuth) "Войти через Firebase" else "Войти в локальный профиль",
+                    !s.busy,
+                    true,
+                ) {
+                    s.localAuth = !s.localAuth
+                    s.error = null
+                    a.render()
+                }
+            )
+        u.note(content, s.error ?: if (!s.localAuth) s.cloud.error else null)
         content.addView(u.gap(12))
         content.addView(
             u.text(
-                "Это отдельный профиль на этом телефоне. Реквизиты пользователей 1С вы добавите в подключениях к базам.",
+                if (s.cloud.configured && !s.localAuth)
+                    "Общий аккаунт приложения: email и пароль. Подключения к базам 1С хранятся только на вашем телефоне."
+                else
+                    "Это отдельный профиль на этом телефоне. Реквизиты пользователей 1С вы добавите в подключениях к базам.",
                 12f,
                 false,
                 u.muted,
@@ -115,6 +146,30 @@ class Screens(val a: MainActivity, val u: Ui) {
                 "done" -> "Мои выполненные"
                 else -> "Все задачи"
             }
+        val sections = u.row().apply { setPadding(u.dp(12), 0, u.dp(12), 0) }
+        sections.addView(
+            u.button("Задачи 1С") {}
+                .apply {
+                    minHeight = u.dp(40)
+                    textSize = 12f * u.scale
+                    setPadding(u.dp(6), u.dp(6), u.dp(6), u.dp(6))
+                },
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, u.dp(6), 0) },
+        )
+        sections.addView(
+            u.button("Общие задачи", secondary = true) {
+                    s.page = "cloud"
+                    s.error = null
+                    a.render()
+                }
+                .apply {
+                    minHeight = u.dp(40)
+                    textSize = 12f * u.scale
+                    setPadding(u.dp(6), u.dp(6), u.dp(6), u.dp(6))
+                },
+            LinearLayout.LayoutParams(0, -2, 1f),
+        )
+        root.addView(sections)
         root.addView(
             u.header(
                 title,
@@ -742,9 +797,9 @@ class Screens(val a: MainActivity, val u: Ui) {
         switch("Обновлять после входа", s.autoRefresh) { s.autoRefresh = it }
         switch("Подтверждать смену статуса", s.confirmChanges) { s.confirmChanges = it }
         content.addView(
-            u.button("Очистить кеш общих задач", secondary = true) {
+            u.button("Очистить кеш задач 1С", secondary = true) {
                 AlertDialog.Builder(a)
-                    .setTitle("Очистить общий кеш?")
+                    .setTitle("Очистить кеш задач 1С?")
                     .setMessage(
                         "Ваши взятые, выполненные задачи и незавершённые проверки останутся на телефоне."
                     )
@@ -766,12 +821,7 @@ class Screens(val a: MainActivity, val u: Ui) {
             }
         )
         content.addView(
-            u.text(
-                "Задачи / Dev · 1.1.0\nЛокальный профиль • данные защищены на устройстве",
-                12f,
-                false,
-                u.muted,
-            )
+            u.text("Задачи / Dev · 1.2.0\nПодключения 1С хранятся на телефоне", 12f, false, u.muted)
         )
         u.fill(root, u.scroll(content).apply { tag = "scroll" })
     }

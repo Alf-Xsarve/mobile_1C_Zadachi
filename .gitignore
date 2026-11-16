@@ -10,3 +10,8 @@ local.properties
 *.log
 .env*
 *.local.json
+google-services.json
+firebase-debug.log
+firestore-debug.log
+firebase/node_modules/
+firebase/.firebase/
