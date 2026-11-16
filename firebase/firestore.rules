@@ -42,6 +42,22 @@ service cloud.firestore {
             && request.resource.data.assigneeName == resource.data.assigneeName)
         );
       allow delete: if false;
+      match /links/{linkId} {
+        allow read: if authenticated() && exists(/databases/$(database)/documents/tasks/$(taskId));
+        allow create: if authenticated() && exists(/databases/$(database)/documents/tasks/$(taskId))
+          && linkId.matches('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+          && request.resource.data.keys().hasAll(['name', 'url', 'kind', 'authorId', 'authorName', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['name', 'url', 'kind', 'authorId', 'authorName', 'createdAt'])
+          && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 160
+          && request.resource.data.url is string && request.resource.data.url.size() <= 4096
+          && request.resource.data.url.matches('https?://[^\\s/@]+([/?#][^\\s]*)?')
+          && (request.resource.data.kind in ['web', 'file', 'image']
+            || (request.resource.data.kind == 'whatsapp' && request.resource.data.url.matches('https://(wa[.]me|([A-Za-z0-9-]+[.])*whatsapp[.]com)(/[^\\s]*)?'))
+            || (request.resource.data.kind == 'telegram' && request.resource.data.url.matches('https://(t[.]me|telegram[.]me|[A-Za-z0-9_-]+[.]t[.]me)(/[^\\s]*)?')))
+          && request.resource.data.authorId == request.auth.uid && request.resource.data.authorName == actorName()
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
     }
     match /{document=**} { allow read, write: if false; }
   }

@@ -13,6 +13,30 @@ class MainActivity : Activity() {
     lateinit var state: AppState
     private var shown: String? = null
 
+    fun openWebLink(address: String) {
+        try {
+            val url = kg.devtasks.app.core.webLink(address)
+            startActivity(
+                Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                    .addCategory(Intent.CATEGORY_BROWSABLE)
+            )
+        } catch (_: android.content.ActivityNotFoundException) {
+            android.widget.Toast.makeText(
+                    this,
+                    "Нет приложения для открытия веб-ссылок.",
+                    android.widget.Toast.LENGTH_LONG,
+                )
+                .show()
+        } catch (_: Exception) {
+            android.widget.Toast.makeText(
+                    this,
+                    "Не удалось открыть ссылку HTTP или HTTPS.",
+                    android.widget.Toast.LENGTH_LONG,
+                )
+                .show()
+        }
+    }
+
     fun scan() {
         if (state.user == null || state.busy || state.editor?.busy == true) return
         currentFocus?.let {

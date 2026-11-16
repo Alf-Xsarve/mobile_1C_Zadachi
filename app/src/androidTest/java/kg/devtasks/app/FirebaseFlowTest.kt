@@ -99,13 +99,64 @@ class FirebaseFlowTest {
             val title = "Общая задача ${System.nanoTime()}"
             inst.runOnMainSync {
                 a.draft =
-                    CloudDraft(title = title, description = "Проверка общего списка и исполнителя")
+                    CloudDraft(
+                        title = title,
+                        description =
+                            "Проверка общего списка и исполнителя: https://example.test/guide",
+                    )
+                val id = a.draft!!.id
+                assertTrue(
+                    a.links.add(
+                        id,
+                        "Техническое задание",
+                        "https://example.test/task.pdf",
+                        "file",
+                        a.profileName,
+                        false,
+                    )
+                )
+                assertTrue(
+                    a.links.add(
+                        id,
+                        "Скриншот",
+                        "https://example.test/screen.png",
+                        "image",
+                        a.profileName,
+                        false,
+                    )
+                )
+                assertTrue(
+                    a.links.add(
+                        id,
+                        "Инструкция",
+                        "https://example.test/guide",
+                        "web",
+                        a.profileName,
+                        false,
+                    )
+                )
                 a.create()
             }
             waitFor {
                 !a.busy && a.items.any { it.title == title } && b.items.any { it.title == title }
             }
             val task = a.items.first { it.title == title }
+            assertNull(a.links.error)
+            assertNull(a.draft)
+            inst.runOnMainSync { b.selectedId = task.id }
+            waitFor { b.links.items.size == 3 }
+            assertTrue(b.links.items.all { it.authorId == a.account!!.uid })
+            inst.runOnMainSync {
+                b.links.add(
+                    task.id,
+                    "Дополнение Бориса",
+                    "https://example.test/extra",
+                    "web",
+                    b.profileName,
+                    true,
+                )
+            }
+            waitFor { !b.links.busy && a.links.items.size == 4 && b.links.items.size == 4 }
             assertEquals("Алиса", task.authorName)
             inst.runOnMainSync {
                 a.change(task, false)
@@ -162,6 +213,7 @@ class FirebaseFlowTest {
             inst.waitForIdleSync()
             screenshot("firebase-common-tasks")
             onView(withText(title)).perform(click())
+            waitFor { activityState!!.cloud.links.items.size == 4 }
             onView(withText("Общие задачи"))
                 .check(
                     androidx.test.espresso.assertion.ViewAssertions.matches(
@@ -175,6 +227,144 @@ class FirebaseFlowTest {
                     )
                 )
             screenshot("firebase-task-assignee")
+            androidx.test.espresso.intent.Intents.init()
+            try {
+                val browserIntent =
+                    org.hamcrest.Matchers.allOf(
+                        androidx.test.espresso.intent.matcher.IntentMatchers.hasAction(
+                            android.content.Intent.ACTION_VIEW
+                        ),
+                        androidx.test.espresso.intent.matcher.IntentMatchers.hasData(
+                            "https://example.test/task.pdf"
+                        ),
+                    )
+                androidx.test.espresso.intent.Intents.intending(browserIntent)
+                    .respondWith(
+                        android.app.Instrumentation.ActivityResult(
+                            android.app.Activity.RESULT_CANCELED,
+                            null,
+                        )
+                    )
+                onView(
+                        androidx.test.espresso.matcher.ViewMatchers.withContentDescription(
+                            "Открыть: Техническое задание"
+                        )
+                    )
+                    .perform(androidx.test.espresso.action.ViewActions.scrollTo(), click())
+                androidx.test.espresso.intent.Intents.intended(browserIntent)
+            } finally {
+                androidx.test.espresso.intent.Intents.release()
+            }
+            onView(withText("+ Ссылка"))
+                .perform(androidx.test.espresso.action.ViewActions.scrollTo(), click())
+            onView(
+                    androidx.test.espresso.matcher.ViewMatchers.withContentDescription(
+                        "Название материала (необязательно)"
+                    )
+                )
+                .perform(
+                    androidx.test.espresso.action.ViewActions.replaceText("Ссылка из приложения")
+                )
+            onView(
+                    androidx.test.espresso.matcher.ViewMatchers.withContentDescription(
+                        "Адрес ссылки"
+                    )
+                )
+                .perform(
+                    androidx.test.espresso.action.ViewActions.replaceText("javascript:alert(1)")
+                )
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            onView(withText("Добавить")).perform(click())
+            assertTrue(activityState!!.cloud.links.pendingFor(task.id).isEmpty())
+            onView(
+                    androidx.test.espresso.matcher.ViewMatchers.withContentDescription(
+                        "Адрес ссылки"
+                    )
+                )
+                .perform(
+                    androidx.test.espresso.action.ViewActions.replaceText(
+                        "https://example.test/from-app"
+                    )
+                )
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            onView(withText("Добавить")).perform(click())
+            waitFor { activityState!!.cloud.links.items.size == 5 && b.links.items.size == 5 }
+            onView(withText("+ WhatsApp"))
+                .perform(androidx.test.espresso.action.ViewActions.scrollTo(), click())
+            onView(
+                    androidx.test.espresso.matcher.ViewMatchers.withContentDescription(
+                        "Имя клиента (необязательно)"
+                    )
+                )
+                .perform(androidx.test.espresso.action.ViewActions.replaceText("Клиент WhatsApp"))
+            onView(
+                    androidx.test.espresso.matcher.ViewMatchers.withContentDescription(
+                        "Номер телефона или ссылка"
+                    )
+                )
+                .perform(
+                    androidx.test.espresso.action.ViewActions.replaceText("+996 (555) 12-34-56")
+                )
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            onView(withText("Добавить")).perform(click())
+            waitFor { activityState!!.cloud.links.items.size == 6 && b.links.items.size == 6 }
+            onView(withText("+ Telegram"))
+                .perform(androidx.test.espresso.action.ViewActions.scrollTo(), click())
+            onView(
+                    androidx.test.espresso.matcher.ViewMatchers.withContentDescription(
+                        "Имя клиента (необязательно)"
+                    )
+                )
+                .perform(androidx.test.espresso.action.ViewActions.replaceText("Клиент Telegram"))
+            onView(
+                    androidx.test.espresso.matcher.ViewMatchers.withContentDescription(
+                        "Номер, @username или ссылка"
+                    )
+                )
+                .perform(androidx.test.espresso.action.ViewActions.replaceText("@client_dev"))
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            onView(withText("Добавить")).perform(click())
+            waitFor { activityState!!.cloud.links.items.size == 7 && b.links.items.size == 7 }
+            androidx.test.espresso.intent.Intents.init()
+            try {
+                androidx.test.espresso.intent.Intents.intending(
+                        androidx.test.espresso.intent.matcher.IntentMatchers.hasAction(
+                            android.content.Intent.ACTION_VIEW
+                        )
+                    )
+                    .respondWith(
+                        android.app.Instrumentation.ActivityResult(
+                            android.app.Activity.RESULT_CANCELED,
+                            null,
+                        )
+                    )
+                onView(
+                        androidx.test.espresso.matcher.ViewMatchers.withContentDescription(
+                            "Открыть: Клиент WhatsApp"
+                        )
+                    )
+                    .perform(androidx.test.espresso.action.ViewActions.scrollTo(), click())
+                androidx.test.espresso.intent.Intents.intended(
+                    androidx.test.espresso.intent.matcher.IntentMatchers.hasData(
+                        "https://wa.me/996555123456"
+                    )
+                )
+                onView(
+                        androidx.test.espresso.matcher.ViewMatchers.withContentDescription(
+                            "Открыть: Клиент Telegram"
+                        )
+                    )
+                    .perform(androidx.test.espresso.action.ViewActions.scrollTo(), click())
+                androidx.test.espresso.intent.Intents.intended(
+                    androidx.test.espresso.intent.matcher.IntentMatchers.hasData(
+                        "https://t.me/client_dev"
+                    )
+                )
+                screenshot("firebase-client-contacts")
+            } finally {
+                androidx.test.espresso.intent.Intents.release()
+            }
+            screenshot("firebase-task-links")
         } finally {
             scenario?.close()
             a.close()

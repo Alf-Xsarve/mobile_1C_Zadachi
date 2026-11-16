@@ -26,6 +26,8 @@ data class CloudTask(
 }
 
 class CloudDraft(val id: String = uid(), var title: String = "", var description: String = "") {
+    var created = false
+
     fun validate() {
         if (title.trim().length !in 3..160)
             throw UserError("Название задачи: от 3 до 160 символов.")

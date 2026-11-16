@@ -252,7 +252,8 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
         val d = c.draft ?: return
         val body = u.column(16)
         body.addView(
-            u.input("Название общей задачи", d.title) { d.title = it }.apply { isEnabled = !c.busy }
+            u.input("Название общей задачи", d.title) { d.title = it }
+                .apply { isEnabled = !c.busy && !d.created }
         )
         body.addView(
             u.input("Описание общей задачи", d.description) { d.description = it }
@@ -265,7 +266,7 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
                         android.text.InputType.TYPE_CLASS_TEXT or
                             android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                             android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-                    isEnabled = !c.busy
+                    isEnabled = !c.busy && !d.created
                 }
         )
         body.addView(
@@ -275,10 +276,33 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
                 color = u.muted,
             )
         )
+        if (d.created)
+            body.addView(
+                u.text(
+                    "Задача создана. Осталось отправить добавленные ссылки.",
+                    13f,
+                    color = u.muted,
+                )
+            )
+        TaskLinkViews(a, u).section(body, d.id, true)
         body.addView(
-            u.button(if (c.busy) "Сохраняем…" else "Создать задачу", !c.busy) { c.create() }
+            u.button(
+                if (c.busy || c.links.busy) "Сохраняем…"
+                else if (d.created) "Отправить ссылки" else "Создать задачу",
+                !c.busy && !c.links.busy,
+            ) {
+                c.create()
+            }
         )
-        body.addView(u.button("Отмена", !c.busy, true) { a.state.back() })
+        body.addView(
+            u.button(
+                if (d.created) "Перейти к задаче" else "Отмена",
+                !c.busy && !c.links.busy,
+                true,
+            ) {
+                a.state.back()
+            }
+        )
         u.fill(root, u.scroll(body).apply { tag = "scroll" })
     }
 
@@ -300,14 +324,22 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
                 true,
             )
         )
-        body.addView(u.text(task.description.ifBlank { "Описание не добавлено" }, 16f))
+        body.addView(
+            TaskLinkViews(a, u)
+                .decorate(u.text(task.description.ifBlank { "Описание не добавлено" }, 16f))
+        )
         if (task.createdAt > 0)
             body.addView(u.text("Создана ${timeText(task.createdAt)}", 12f, color = u.muted))
         val uid = c.account?.uid.orEmpty()
         if (task.canClaim(uid))
-            body.addView(u.button("Взять общую задачу", !c.busy) { confirm(task, false) })
+            body.addView(
+                u.button("Взять общую задачу", !c.busy && !c.links.busy) { confirm(task, false) }
+            )
         if (task.canComplete(uid))
-            body.addView(u.button("Завершить общую задачу", !c.busy) { confirm(task, true) })
+            body.addView(
+                u.button("Завершить общую задачу", !c.busy && !c.links.busy) { confirm(task, true) }
+            )
+        TaskLinkViews(a, u).section(body, task.id, false)
         u.fill(root, u.scroll(body).apply { tag = "scroll" })
     }
 

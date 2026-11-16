@@ -821,7 +821,7 @@ class Screens(val a: MainActivity, val u: Ui) {
             }
         )
         content.addView(
-            u.text("Задачи / Dev · 1.2.0\nПодключения 1С хранятся на телефоне", 12f, false, u.muted)
+            u.text("Задачи / Dev · 1.3.0\nПодключения 1С хранятся на телефоне", 12f, false, u.muted)
         )
         u.fill(root, u.scroll(content).apply { tag = "scroll" })
     }

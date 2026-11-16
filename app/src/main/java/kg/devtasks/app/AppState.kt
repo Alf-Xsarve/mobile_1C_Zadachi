@@ -639,9 +639,9 @@ class AppState(
 
     fun back(): Boolean {
         if (page == "cloud") {
-            if (cloud.busy) return true
+            if (cloud.busy || cloud.links.busy) return true
             when {
-                cloud.draft != null -> cloud.draft = null
+                cloud.draft != null -> cloud.discardDraft()
                 cloud.selectedId != null -> cloud.selectedId = null
                 else -> page = "home"
             }

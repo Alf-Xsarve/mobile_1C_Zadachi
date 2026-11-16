@@ -19,6 +19,7 @@ class FirebaseTasks(
             ?: FirebaseApp.initializeApp(context)
     private val auth = app?.let { FirebaseAuth.getInstance(it) }
     private val db = app?.let { FirebaseFirestore.getInstance(it) }
+    val links = TaskLinks(app, changed)
     val configured
         get() = app != null
 
@@ -47,6 +48,11 @@ class FirebaseTasks(
     var query = ""
     var filter = "all"
     var selectedId: String? = null
+        set(value) {
+            field = value
+            links.watch(value)
+        }
+
     var draft: CloudDraft? = null
     var registering = false
     var email = ""
@@ -270,7 +276,25 @@ class FirebaseTasks(
         val d = draft ?: return
         val user = account ?: return
         val firestore = db ?: return
-        if (busy || !ready) return
+        if (busy || links.busy || !ready) return
+        fun publishLinks() {
+            links.publish(d.id) { ok ->
+                if (closed) return@publish
+                busy = false
+                if (ok) {
+                    draft = null
+                    selectedId = d.id
+                }
+                changed()
+            }
+        }
+        if (d.created) {
+            busy = true
+            error = null
+            changed()
+            publishLinks()
+            return
+        }
         try {
             d.validate()
         } catch (e: Exception) {
@@ -307,9 +331,8 @@ class FirebaseTasks(
             }
             .addOnSuccessListener {
                 if (closed || g != generation) return@addOnSuccessListener
-                draft = null
-                busy = false
-                changed()
+                d.created = true
+                publishLinks()
             }
             .addOnFailureListener {
                 if (closed || g != generation) return@addOnFailureListener
@@ -321,7 +344,7 @@ class FirebaseTasks(
     fun change(task: CloudTask, complete: Boolean) {
         val user = account ?: return
         val firestore = db ?: return
-        if (busy || !ready) return
+        if (busy || links.busy || !ready) return
         val ref = firestore.collection("tasks").document(task.id)
         val g = generation
         busy = true
@@ -386,6 +409,7 @@ class FirebaseTasks(
         listener?.remove()
         listener = null
         auth?.signOut()
+        links.reset()
         items = emptyList()
         profileName = ""
         ready = false
@@ -406,5 +430,12 @@ class FirebaseTasks(
         generation++
         listener?.remove()
         listener = null
+        links.close()
+    }
+
+    fun discardDraft() {
+        val current = draft ?: return
+        draft = null
+        if (current.created) selectedId = current.id else links.discard(current.id)
     }
 }
