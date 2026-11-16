@@ -1,6 +1,7 @@
 package kg.devtasks.app
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
@@ -11,6 +12,25 @@ import kg.devtasks.app.ui.*
 class MainActivity : Activity() {
     lateinit var state: AppState
     private var shown: String? = null
+
+    fun scan() {
+        if (state.user == null || state.busy || state.editor?.busy == true) return
+        currentFocus?.let {
+            (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                .hideSoftInputFromWindow(it.windowToken, 0)
+        }
+        startActivityForResult(Intent(this, QrActivity::class.java), QR_REQUEST)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == QR_REQUEST && resultCode == RESULT_OK)
+            data?.getStringExtra("code")?.let { state.importCode(it) }
+    }
+
+    companion object {
+        private const val QR_REQUEST = 700
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

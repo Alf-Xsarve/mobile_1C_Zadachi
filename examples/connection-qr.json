@@ -1,0 +1,8 @@
+{
+  "type": "devtasks_1c_connection",
+  "version": 1,
+  "name": "База разработчиков",
+  "odataUrl": "https://server.example/base/odata/standard.odata/",
+  "username": "Пользователь1С",
+  "password": "Пароль1С"
+}

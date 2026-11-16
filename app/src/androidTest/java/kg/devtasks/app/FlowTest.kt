@@ -204,6 +204,114 @@ class FlowTest {
     }
 
     @Test
+    fun scannerOpensAndCancellationKeepsConnectionsUnchanged() {
+        register()
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                inst.uiAutomation.executeShellCommand(
+                    "pm grant ${inst.targetContext.packageName} android.permission.CAMERA"
+                )
+            )
+            .use { it.readBytes() }
+        onView(withContentDescription("Добавить базу по QR-коду")).perform(click())
+        waitText("Подключение по QR")
+        shot("tasks-qr-scanner")
+        click("Отмена")
+        waitText("Все задачи")
+        scenario.onActivity { Assert.assertTrue(it.state.sources.isEmpty()) }
+        Assert.assertEquals(0, first.server.requestCount)
+    }
+
+    @Test
+    fun qrImportConnectsAutomaticallyAndRejectsDuplicates() {
+        register()
+        val code =
+            Json.encode(
+                mapOf(
+                    "type" to "accounting_1c_connection",
+                    "version" to 1,
+                    "name" to "QR база",
+                    "odataUrl" to first.url,
+                    "username" to first.login,
+                    "password" to first.password,
+                )
+            )
+        androidx.test.espresso.intent.Intents.init()
+        try {
+            androidx.test.espresso.intent.Intents.intending(
+                    androidx.test.espresso.intent.matcher.IntentMatchers.hasComponent(
+                        kg.devtasks.app.ui.QrActivity::class.java.name
+                    )
+                )
+                .respondWith(
+                    android.app.Instrumentation.ActivityResult(
+                        android.app.Activity.RESULT_OK,
+                        android.content.Intent().putExtra("code", code),
+                    )
+                )
+            onView(withContentDescription("Добавить базу по QR-коду")).perform(click())
+            waitText("Подключения")
+            waitText("▣ QR база")
+            first.checkAuth()
+            scenario.onActivity {
+                Assert.assertEquals(1, it.state.sources.size)
+                Assert.assertEquals(first.login, it.state.sources.single().login)
+            }
+            val requests = first.server.requestCount
+            onView(withContentDescription("Добавить базу по QR-коду")).perform(click())
+            waitText("Эта база уже подключена.")
+            Assert.assertEquals(requests, first.server.requestCount)
+            scenario.onActivity { Assert.assertEquals(1, it.state.sources.size) }
+        } finally {
+            androidx.test.espresso.intent.Intents.release()
+        }
+    }
+
+    @Test
+    fun compactListShowsMoreTasksAndRecyclesRowsWhenScrolling() {
+        connect()
+        scenario.onActivity { a ->
+            val source = a.state.sources.first { it.name == "Главная база" }
+            a.state.store.merge(
+                a.state.user!!.id,
+                source.id,
+                (1..20).map { n ->
+                    first.task +
+                        mapOf(
+                            "Ref_Key" to
+                                "bbbbbbbb-bbbb-bbbb-bbbb-${n.toString().padStart(12, '0')}",
+                            "Description" to "Проверка прокрутки $n",
+                            "Number" to "TEST-${n.toString().padStart(2, '0')}",
+                            "Date" to "2026-11-16T10:00:${n.toString().padStart(2, '0')}",
+                        )
+                },
+            )
+        }
+        // Перезапуск загружает сохранённые данные через тот же путь, что и обычный запуск.
+        scenario.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        waitText("Все задачи")
+        Thread.sleep(1000)
+        scenario.onActivity {
+            val list =
+                it.findViewById<android.view.ViewGroup>(android.R.id.content)
+                    .findViewWithTag<android.widget.ListView>("tasks")
+            Assert.assertTrue(
+                "В списке должны быть видны минимум четыре строки",
+                list.childCount >= 4,
+            )
+            list.setSelection(18)
+        }
+        inst.waitForIdleSync()
+        scenario.onActivity {
+            val list =
+                it.findViewById<android.view.ViewGroup>(android.R.id.content)
+                    .findViewWithTag<android.widget.ListView>("tasks")
+            Assert.assertTrue(list.firstVisiblePosition >= 15)
+        }
+        shot("tasks-compact-scrolled")
+    }
+
+    @Test
     fun multiBaseClaimCompleteAndOfflineCache() {
         connect()
         shot("tasks-yellow")

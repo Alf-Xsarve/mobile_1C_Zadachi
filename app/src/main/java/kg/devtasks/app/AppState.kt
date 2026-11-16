@@ -350,6 +350,24 @@ class AppState(context: Context) {
         )
     }
 
+    fun importCode(code: String) {
+        if (user == null || editor?.busy == true) return
+        try {
+            val connection = ConnectionCode.parse(code)
+            openEditor()
+            editor!!.apply {
+                name = connection.name
+                url = connection.url
+                login = connection.login
+                password = connection.password
+            }
+            addSource()
+        } catch (e: Exception) {
+            error = message(e)
+            notifyUi()
+        }
+    }
+
     fun removeSource(source: Source) {
         val actor = user ?: return
         if (syncing || working.isNotEmpty()) return

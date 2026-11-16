@@ -206,12 +206,25 @@ class Ui(
         sub: String = "",
         back: (() -> Unit)? = null,
         actions: List<View> = emptyList(),
+        compact: Boolean = false,
     ): View =
         row().apply {
-            setPadding(dp(16), dp(12), dp(16), dp(8))
+            setPadding(
+                dp(if (compact) 12 else 16),
+                dp(if (compact) 2 else 12),
+                dp(12),
+                dp(if (compact) 2 else 8),
+            )
             if (back != null) addView(icon("‹", "Назад", back))
             val labels = column()
-            labels.addView(text(title, 23f, true))
+            labels.addView(
+                text(title, if (compact) 20f else 23f, true).apply {
+                    if (compact) {
+                        maxLines = 1
+                        ellipsize = TextUtils.TruncateAt.END
+                    }
+                }
+            )
             if (sub.isNotBlank()) labels.addView(text(sub, 12f, false, muted))
             addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
             actions.forEach { addView(it) }

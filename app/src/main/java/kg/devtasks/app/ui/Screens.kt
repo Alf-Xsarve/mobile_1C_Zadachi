@@ -2,7 +2,6 @@ package kg.devtasks.app.ui
 
 import android.app.AlertDialog
 import android.content.Context
-import android.text.TextUtils
 import android.view.*
 import android.widget.*
 import kg.devtasks.app.*
@@ -110,31 +109,40 @@ class Screens(val a: MainActivity, val u: Ui) {
             nav(root)
             return
         }
-        val user = s.user!!
+        val title =
+            when (s.tab) {
+                "mine" -> "Взятые мной"
+                "done" -> "Мои выполненные"
+                else -> "Все задачи"
+            }
         root.addView(
             u.header(
-                "Привет, ${user.name.substringBefore(' ')}",
-                "Задачи / Dev",
+                title,
                 actions =
                     listOf(
                         u.icon("↻", "Обновить задачи") { s.refresh() },
-                        u.icon(user.name.take(1).uppercase(), "Профиль") {
-                            s.tab = "settings"
-                            a.render()
-                        },
+                        u.icon("▦", "Добавить базу по QR-коду") { a.scan() },
                     ),
+                compact = true,
             )
         )
         val summary =
-            u.card(15).apply {
-                background = u.shape(if (u.dark) 0xFF33301C.toInt() else 0xFFFFF2B6.toInt(), 20)
+            u.card(7).apply {
+                background = u.shape(if (u.dark) 0xFF33301C.toInt() else 0xFFFFF2B6.toInt(), 10)
+                layoutParams =
+                    LinearLayout.LayoutParams(-1, -2).apply {
+                        setMargins(u.dp(12), 0, u.dp(12), u.dp(3))
+                    }
             }
         val counts = u.row()
         fun count(number: Int, label: String) {
-            val box = u.column()
-            box.addView(u.text("$number", 25f, true))
-            box.addView(u.text(label, 11f, false, u.muted))
-            counts.addView(box, LinearLayout.LayoutParams(0, -2, 1f))
+            counts.addView(
+                u.text("$number $label", 11f, true).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(0, u.dp(2), 0, u.dp(2))
+                },
+                LinearLayout.LayoutParams(0, -2, 1f),
+            )
         }
         count(
             s.tasks.count { t ->
@@ -150,7 +158,7 @@ class Screens(val a: MainActivity, val u: Ui) {
                         .find { it.id == t.sourceId }
                         ?.let { t.phase(it.mapping) == Phase.ACTIVE } == true
             },
-            "мои в работе",
+            "в работе",
         )
         count(
             s.tasks.count { t ->
@@ -163,24 +171,23 @@ class Screens(val a: MainActivity, val u: Ui) {
         )
         summary.addView(counts)
         root.addView(summary)
-        val tools = u.column(16)
-        val title =
-            when (s.tab) {
-                "mine" -> "Взятые мной"
-                "done" -> "Мои выполненные"
-                else -> "Все задачи"
-            }
-        val titleRow = u.row()
-        titleRow.addView(u.text(title, 20f, true), LinearLayout.LayoutParams(0, -2, 1f))
-        titleRow.addView(u.icon("☷", "Фильтр по базе") { chooseSource() })
-        tools.addView(titleRow)
+        val tools = u.column().apply { setPadding(u.dp(12), 0, u.dp(12), u.dp(3)) }
+        val searchRow = u.row()
         var populate: (() -> Unit)? = null
-        tools.addView(
+        searchRow.addView(
             u.input("Поиск задач", s.query) {
-                s.query = it
-                populate?.invoke()
-            }
+                    s.query = it
+                    populate?.invoke()
+                }
+                .apply {
+                    textSize = 13f * u.scale
+                    minimumHeight = u.dp(48)
+                    setPadding(u.dp(12), u.dp(8), u.dp(12), u.dp(8))
+                },
+            LinearLayout.LayoutParams(0, -2, 1f),
         )
+        searchRow.addView(u.icon("☷", "Фильтр по базе") { chooseSource() })
+        tools.addView(searchRow)
         val filters = u.row()
         listOf(
                 null to "Все",
@@ -191,7 +198,9 @@ class Screens(val a: MainActivity, val u: Ui) {
             .forEach { (phase, label) ->
                 filters.addView(
                     u.chip(label, if (s.filter == phase) u.ink else u.muted).apply {
-                        setPadding(u.dp(12), u.dp(9), u.dp(12), u.dp(9))
+                        setPadding(u.dp(12), u.dp(6), u.dp(12), u.dp(6))
+                        minHeight = u.dp(40)
+                        gravity = Gravity.CENTER
                         background = u.shape(if (s.filter == phase) u.accent else u.paper, 12)
                         setOnClickListener {
                             s.filter = phase
@@ -287,7 +296,26 @@ class Screens(val a: MainActivity, val u: Ui) {
                                 position: Int,
                                 convertView: View?,
                                 parent: ViewGroup?,
-                            ) = taskCard(values[position])
+                            ): View {
+                                val task = values[position]
+                                val source = s.sources.first { it.id == task.sourceId }
+                                return ((convertView as? TaskRow) ?: TaskRow(u)).apply {
+                                    bind(
+                                        task,
+                                        source,
+                                        s.pending.any {
+                                            it.sourceId == task.sourceId && it.key == task.key
+                                        },
+                                        phaseColor(task.phase(source.mapping)),
+                                    ) {
+                                        s.detailId = task.id
+                                        s.page = "detail"
+                                        s.error = null
+                                        hideKeyboard()
+                                        a.render()
+                                    }
+                                }
+                            }
                         }
                 }
             u.fill(area, list)
@@ -296,6 +324,11 @@ class Screens(val a: MainActivity, val u: Ui) {
                 area.addView(
                     u.button(if (s.syncing) "Обновляем…" else "Загрузить ещё", !s.syncing, true) {
                             s.refresh(true)
+                        }
+                        .apply {
+                            minHeight = u.dp(44)
+                            textSize = 13f * u.scale
+                            setPadding(u.dp(12), u.dp(7), u.dp(12), u.dp(7))
                         }
                         .apply {
                             layoutParams =
@@ -313,7 +346,7 @@ class Screens(val a: MainActivity, val u: Ui) {
     fun nav(root: LinearLayout) {
         val bar =
             u.row().apply {
-                setPadding(u.dp(8), u.dp(7), u.dp(8), u.dp(7))
+                setPadding(u.dp(8), u.dp(3), u.dp(8), u.dp(3))
                 background = u.shape(u.paper, 0)
             }
         listOf("all" to "Все", "mine" to "Мои", "done" to "Готово", "settings" to "Настройки")
@@ -328,8 +361,9 @@ class Screens(val a: MainActivity, val u: Ui) {
                         }
                         .apply {
                             contentDescription = "Раздел $title"
-                            setPadding(u.dp(3), u.dp(10), u.dp(3), u.dp(10))
-                            textSize = 12f * u.scale
+                            minHeight = u.dp(48)
+                            setPadding(u.dp(3), u.dp(7), u.dp(3), u.dp(7))
+                            textSize = 11f * u.scale
                         },
                     LinearLayout.LayoutParams(0, -2, 1f).apply {
                         setMargins(u.dp(3), 0, u.dp(3), 0)
@@ -337,57 +371,6 @@ class Screens(val a: MainActivity, val u: Ui) {
                 )
             }
         root.addView(bar)
-    }
-
-    fun taskCard(task: TaskItem): View {
-        val source = s.sources.first { it.id == task.sourceId }
-        val phase = task.phase(source.mapping)
-        val card = u.card(16)
-        val top = u.row()
-        top.addView(
-            u.text(
-                task.raw["Number"].text().let { if (it.isBlank()) "ЗАДАЧА" else "№ $it" },
-                11f,
-                true,
-                u.muted,
-            ),
-            LinearLayout.LayoutParams(0, -2, 1f),
-        )
-        top.addView(u.chip(if (task.unavailable) "Недоступна" else phase.label, phaseColor(phase)))
-        card.addView(top)
-        card.addView(u.gap(7))
-        card.addView(u.text(task.title(source.mapping), 17f, true))
-        val desc = task.raw[source.mapping.description].text()
-        if (desc.isNotBlank())
-            card.addView(
-                u.text(desc, 13f, false, u.muted).apply {
-                    maxLines = 2
-                    ellipsize = TextUtils.TruncateAt.END
-                }
-            )
-        card.addView(u.gap(12))
-        val bottom = u.row()
-        bottom.addView(u.chip("▣ ${source.name}"), LinearLayout.LayoutParams(0, -2, 1f))
-        val pending = s.pending.any { it.sourceId == task.sourceId && it.key == task.key }
-        bottom.addView(
-            u.text(
-                if (pending) "Проверить запись"
-                else if (task.completed && phase == Phase.DONE) "✓ Готово"
-                else if (task.taken) "Взята вами" else "Открыть →",
-                11f,
-                true,
-                if (pending) 0xFFB17725.toInt() else u.muted,
-            )
-        )
-        card.addView(bottom)
-        card.setOnClickListener {
-            s.detailId = task.id
-            s.page = "detail"
-            s.error = null
-            hideKeyboard()
-            a.render()
-        }
-        return card
     }
 
     fun phaseColor(p: Phase) =
@@ -425,9 +408,22 @@ class Screens(val a: MainActivity, val u: Ui) {
             root,
             "Подключения",
             "Все ваши базы 1С",
-            actions = listOf(u.icon("+", "Добавить базу") { s.openEditor() }),
+            actions =
+                listOf(
+                    u.icon("▦", "Добавить базу по QR-коду") { a.scan() },
+                    u.icon("+", "Добавить базу") { s.openEditor() },
+                ),
         )
         val content = u.column()
+        content.addView(
+            u.button("Сканировать QR-код", !s.busy && !s.syncing) { a.scan() }
+                .apply {
+                    layoutParams =
+                        LinearLayout.LayoutParams(-1, -2).apply {
+                            setMargins(u.dp(16), u.dp(5), u.dp(16), u.dp(5))
+                        }
+                }
+        )
         s.sources.forEach { source ->
             val card = u.card()
             card.addView(u.text("▣ ${source.name}", 19f, true))
@@ -491,6 +487,10 @@ class Screens(val a: MainActivity, val u: Ui) {
             "Задачи будут видны в общем списке",
         )
         val content = u.column(20)
+        if (!e.existing) {
+            content.addView(u.button("Сканировать QR-код", !e.busy) { a.scan() })
+            content.addView(u.text("Или введите реквизиты вручную", 12f, color = u.muted))
+        }
         val card = u.card(18).apply { layoutParams = LinearLayout.LayoutParams(-1, -2) }
         card.addView(u.text("Доступ к OData", 19f, true))
         card.addView(u.input("Название базы", e.name) { e.name = it })
@@ -767,7 +767,7 @@ class Screens(val a: MainActivity, val u: Ui) {
         )
         content.addView(
             u.text(
-                "Задачи / Dev · 1.0.0\nЛокальный профиль • данные защищены на устройстве",
+                "Задачи / Dev · 1.1.0\nЛокальный профиль • данные защищены на устройстве",
                 12f,
                 false,
                 u.muted,
