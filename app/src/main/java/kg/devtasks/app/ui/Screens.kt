@@ -86,18 +86,10 @@ class Screens(val a: MainActivity, val u: Ui) {
             }
         )
         content.addView(card)
-        if (s.cloud.configured && !s.localAuth && !s.registering)
-            content.addView(
-                u.button("Восстановить пароль", !s.busy, true) {
-                    s.error = null
-                    s.cloud.email = s.authLogin
-                    s.cloud.resetPassword()
-                }
-            )
         if (s.cloud.configured)
             content.addView(
                 u.button(
-                    if (s.localAuth) "Войти через Firebase" else "Войти в локальный профиль",
+                    if (s.localAuth) "Войти через сервер" else "Войти в локальный профиль",
                     !s.busy,
                     true,
                 ) {

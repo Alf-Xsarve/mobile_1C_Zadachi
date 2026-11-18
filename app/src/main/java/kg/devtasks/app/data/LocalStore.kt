@@ -96,18 +96,24 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "devtasks.db", nu
         readableDatabase
             .rawQuery("SELECT id,login,name FROM accounts WHERE id=?", arrayOf(id))
             .use {
-                if (it.moveToFirst()) User(it.getString(0), it.getString(1), it.getString(2))
+                if (it.moveToFirst())
+                    User(
+                        it.getString(0),
+                        if (it.getString(0).startsWith("api:")) it.getString(1).removePrefix("api:")
+                        else it.getString(1),
+                        it.getString(2),
+                    )
                 else null
             }
 
-    // Пароль облачного аккаунта проверяет Firebase; локально он не сохраняется.
-    fun cloudUser(firebaseUid: String, email: String, name: String): User {
-        val id = "firebase:$firebaseUid"
+    // Пароль проверяется сервером; на телефоне хранится только профиль.
+    fun serverUser(serverUid: String, email: String, name: String): User {
+        val id = "api:$serverUid"
         val user = User(id, canonical(email), name)
         val values =
             ContentValues().apply {
                 put("id", id)
-                put("login", user.login)
+                put("login", "api:" + user.login)
                 put("name", user.name)
                 put("salt", byteArrayOf())
                 put("hash", byteArrayOf())

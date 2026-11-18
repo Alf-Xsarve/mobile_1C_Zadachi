@@ -1,5 +1,4 @@
 plugins { id("com.android.application") }
-if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
 
 android {
     namespace = "kg.devtasks.app"
@@ -8,8 +7,8 @@ android {
         applicationId = "kg.devtasks.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "2.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     compileOptions {
@@ -20,10 +19,6 @@ android {
 }
 
 dependencies {
-    // Совместима со встроенным Kotlin 2.2 в AGP 9.1; SDK 35.x требует Kotlin 2.4.
-    implementation(platform("com.google.firebase:firebase-bom:34.7.0"))
-    implementation("com.google.firebase:firebase-auth")
-    implementation("com.google.firebase:firebase-firestore")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("junit:junit:4.13.2")

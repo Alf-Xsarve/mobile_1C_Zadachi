@@ -18,33 +18,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - run: chmod +x gradlew
-      - name: Configure Firebase when repository secret is provided
-        env:
-          FIREBASE_ANDROID_CONFIG: ${{ secrets.FIREBASE_ANDROID_CONFIG }}
-        run: |
-          if [ -n "$FIREBASE_ANDROID_CONFIG" ]; then
-            printf '%s' "$FIREBASE_ANDROID_CONFIG" > app/google-services.json
-          fi
       - run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: devtasks-android-debug
           path: app/build/outputs/apk/debug/app-debug.apk
-  firebase-rules:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: firebase
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: firebase/package-lock.json
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - run: npm ci --no-audit --no-fund
-      - run: npm test

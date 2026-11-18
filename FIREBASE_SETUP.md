@@ -1,3 +1,5 @@
+> Архив для версии 1.x. В Android 2.0.0 Firebase не используется. См. server/TASKS_SETUP.md.
+
 # Firebase: подключение и проверка
 
 Проект: `mobile-tasks-in-1c`. Android package: `kg.devtasks.app`.

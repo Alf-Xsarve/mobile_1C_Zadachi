@@ -140,6 +140,16 @@ class MainActivity : Activity() {
 
     override fun onRetainNonConfigurationInstance(): Any = state
 
+    override fun onStart() {
+        super.onStart()
+        state.cloud.foreground(true)
+    }
+
+    override fun onStop() {
+        state.cloud.foreground(false)
+        super.onStop()
+    }
+
     override fun onDestroy() {
         state.render = null
         if (!isChangingConfigurations) state.close()

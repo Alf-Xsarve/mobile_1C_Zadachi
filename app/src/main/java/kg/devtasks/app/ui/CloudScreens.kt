@@ -34,7 +34,7 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
             body.addView(u.text("Общие задачи ещё не подключены", 22f, true))
             body.addView(
                 u.text(
-                    "Администратору нужно подключить Firebase для этой версии приложения. Задачи 1С доступны в своём разделе."
+                    "Администратору нужно подключить API для этой версии приложения. Задачи 1С доступны в своём разделе."
                 )
             )
             body.addView(u.button("К задачам 1С") { a.state.back() })
@@ -90,34 +90,28 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
                 color = u.muted,
             )
         )
-        if (c.registering) body.addView(u.input("Ваше имя в Firebase", c.name) { c.name = it })
-        body.addView(u.input("Email Firebase", c.email) { c.email = it })
-        body.addView(u.input("Пароль Firebase", c.password, true) { c.password = it })
+        if (c.registering) body.addView(u.input("Ваше имя", c.name) { c.name = it })
+        body.addView(u.input("Email", c.email) { c.email = it })
+        body.addView(u.input("Пароль (от 12 символов)", c.password, true) { c.password = it })
         if (c.registering)
-            body.addView(u.input("Повторите пароль Firebase", c.repeat, true) { c.repeat = it })
+            body.addView(u.input("Повторите пароль", c.repeat, true) { c.repeat = it })
         u.note(body, c.error)
         body.addView(
             u.button(
                 if (c.busy) "Подключение…"
-                else if (c.registering) "Создать аккаунт Firebase" else "Войти в Firebase",
+                else if (c.registering) "Создать аккаунт" else "Войти в аккаунт",
                 !c.busy,
             ) {
                 c.authenticate(c.registering, c.email, c.password, c.name, c.repeat)
             }
         )
         body.addView(
-            u.button(
-                if (c.registering) "Уже есть аккаунт Firebase" else "Регистрация в Firebase",
-                !c.busy,
-                true,
-            ) {
+            u.button(if (c.registering) "Уже есть аккаунт" else "Регистрация", !c.busy, true) {
                 c.registering = !c.registering
                 c.error = null
                 a.render()
             }
         )
-        if (!c.registering)
-            body.addView(u.button("Восстановить пароль", !c.busy, true) { c.resetPassword() })
         u.fill(root, u.scroll(body))
     }
 
@@ -157,7 +151,7 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
         root.addView(
             u.text(
                 if (c.fromCache) "  Сохранённые данные · для изменения нужен интернет"
-                else "  Изменения появляются автоматически",
+                else "  Обновление каждые 15 секунд",
                 11f,
                 color = u.muted,
             )
@@ -227,8 +221,7 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
         }
         populate = { fill() }
         fill()
-        if (c.items.size.toLong() >= c.limit)
-            root.addView(u.button("Загрузить ещё", !c.loading, true) { c.listen(true) })
+        if (c.hasMore) root.addView(u.button("Загрузить ещё", !c.loading, true) { c.listen(true) })
         val actions = u.row().apply { setPadding(u.dp(12), 0, u.dp(12), 0) }
         actions.addView(
             u.button("Обновить", !c.busy, true) { c.listen() },
@@ -240,7 +233,7 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
                     .setTitle(c.profileName)
                     .setMessage(c.account?.email)
                     .setNegativeButton("Закрыть", null)
-                    .setPositiveButton("Выйти из Firebase") { _, _ -> c.signOut() }
+                    .setPositiveButton("Выйти из аккаунта") { _, _ -> c.signOut() }
                     .show()
             },
             LinearLayout.LayoutParams(0, -2, 1f),

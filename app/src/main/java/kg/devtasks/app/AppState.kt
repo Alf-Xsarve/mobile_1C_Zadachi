@@ -20,8 +20,8 @@ data class Editor(
 
 class AppState(
     context: Context,
-    cloudFactory: (Context, () -> Unit) -> FirebaseTasks = { app, changed ->
-        FirebaseTasks(app, changed)
+    cloudFactory: (Context, () -> Unit) -> ServerTasks = { app, changed ->
+        ServerTasks(app, changed)
     },
 ) {
     val store = LocalStore(context.applicationContext)
@@ -90,10 +90,10 @@ class AppState(
         job(
             {
                 val uid = store.setting("session")
-                uid?.let { store.user(it) }
+                uid?.takeUnless { it.startsWith("firebase:") }?.let { store.user(it) }
                     ?: cloud.account?.let {
                         store
-                            .cloudUser(
+                            .serverUser(
                                 it.uid,
                                 it.email.orEmpty(),
                                 it.displayName?.ifBlank { null } ?: it.email.orEmpty(),
@@ -167,7 +167,7 @@ class AppState(
                     job(
                         {
                             val u =
-                                store.cloudUser(
+                                store.serverUser(
                                     identity.uid,
                                     identity.email.orEmpty(),
                                     cloud.profileName,
