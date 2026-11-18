@@ -4,6 +4,7 @@
 
 Android подключается к **https://alf-mobile-tasks.duckdns.org** через HTTPS.
 Сервер: [ASP.NET Core + PostgreSQL](server/README.md).
+Установка с нуля: [IIS и HTTPS](server/IIS_SETUP.md), [подготовка PostgreSQL](server/DATABASE_SETUP.md).
 Перед установкой APK 2.0.0 обновите IIS и схему базы до **2** по
 [инструкции обновления](server/TASKS_SETUP.md). [Контракт API](server/API.md).
 Данные и аккаунты Firebase не переносятся: зарегистрируйте новый серверный аккаунт.

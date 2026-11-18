@@ -1,7 +1,40 @@
 # Подключение PostgreSQL к API в IIS
 
-Этот этап только проверяет соединение (`SELECT 1`), не меняет базу и не
-создаёт таблицы. Приложение Android пока продолжает использовать Firebase.
+Инструкция для Windows Server 2022 и PostgreSQL на том же сервере, что и IIS.
+Android 2.0.0 хранит общие задачи в отдельной базе **mobile_tasks** через API.
+Сначала подготовьте роль и базу, затем настройте соединение и примените миграции.
+Если база и роль уже созданы, переходите к шагу 2.
+
+## 0. Подготовьте PostgreSQL через pgAdmin
+
+Откройте pgAdmin **на сервере** и подключитесь к существующему экземпляру PostgreSQL под его администратором. Это пароль PostgreSQL, заданный при установке.
+
+Если экземпляр ещё не зарегистрирован в pgAdmin:
+
+1. **Servers → Register → Server**. В General задайте понятное имя, например `PostgreSQL сервера`.
+2. Во вкладке Connection: Host=`127.0.0.1`, Port=`5432`, Maintenance database=`postgres`, Username=`postgres` (либо ваш администратор PostgreSQL).
+3. Введите пароль администратора PostgreSQL и сохраните подключение. Если pgAdmin открыт на другом компьютере, `127.0.0.1` укажет на этот компьютер; настройку выполняйте в сеансе сервера.
+4. В Query Tool базы postgres проверьте `SHOW port;` и `SELECT version();`. Для текущего сервера ранее подтверждены порт 5432 и PostgreSQL 14.1. Используйте фактический порт, если он изменился.
+
+Создайте отдельную роль приложения:
+
+1. **Login/Group Roles → Create → Login/Group Role**.
+2. General → Name: `mobile_tasks_api`.
+3. Definition → Password: задайте отдельный надёжный пароль и сохраните его в своём менеджере паролей. Он понадобится скрипту Configure-Database.ps1.
+4. Privileges → Can login?=`Yes`. Superuser, Create roles, Create databases, Update catalog и Replication=`No`. Inherit можно оставить `Yes`.
+5. Сохраните роль. Если она уже существует, используйте её; повторно создавать или менять пароль без необходимости не нужно.
+
+Создайте базу:
+
+1. **Databases → Create → Database**.
+2. Database: `mobile_tasks`.
+3. Owner: `mobile_tasks_api`.
+4. Encoding: `UTF8`; прочие параметры локали оставьте совместимыми с вашим кластером, по умолчанию.
+5. Сохраните. В свойствах базы проверьте имя владельца. Базы 1С для этого API не используются.
+
+Таблицы вручную в pgAdmin создавать не требуется: их создаст команда `--migrate` из шага 4. Для размещения API и PostgreSQL на одном сервере достаточно локального подключения к 127.0.0.1:5432.
+
+До настройки соединения создайте пул IIS `MobileTasksApi` по [IIS_SETUP.md](IIS_SETUP.md): скрипт выдаёт ему права чтения файла настроек.
 
 ## 1. Обновите сборку
 
@@ -93,3 +126,27 @@ Windows. В частности, убедитесь, что пул может ч�
 
 Для локального подключения API не нужно открывать порт 5432 в интернет
 или менять публикацию OData.
+
+## 4. Создайте таблицы приложения
+
+После успешного `/health/database` остановите пул MobileTasksApi и выполните в PowerShell на сервере:
+
+```powershell
+& 'D:\WebApps\MobileTasksApi\MobileTasks.Api.exe' --migrate
+```
+
+Ожидается `Migration completed. Schema version: 2`. Миграция создаёт отдельную схему `mobile_tasks` и таблицы users, sessions, tasks, task_events, task_links, schema_migrations. Она запускается явно, повторный запуск допустим.
+
+Запустите пул и откройте на сервере `http://127.0.0.1:8088/health/schema`:
+
+```json
+{"status":"ok","schemaVersion":2,"requiredVersion":2}
+```
+
+Подробности обновления и резервной копии — [TASKS_SETUP.md](TASKS_SETUP.md).
+
+## Резервное копирование
+
+В pgAdmin выберите **mobile_tasks → Backup**, формат **Custom**, и сохраните файл в отдельной папке резервных копий. Проверьте успешное завершение операции. Делайте копию перед обновлением схемы и регулярно во время эксплуатации. Отдельно сохраните защищённую копию `D:\WebApps\MobileTasksConfig\database.json`: резервная копия PostgreSQL не содержит этот файл или пароль роли кластера.
+
+Официальная документация: [роли pgAdmin](https://www.pgadmin.org/docs/pgadmin4/latest/role_dialog.html), [создание базы](https://www.pgadmin.org/docs/pgadmin4/latest/database_dialog.html).
