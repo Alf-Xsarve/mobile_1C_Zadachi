@@ -22,6 +22,7 @@ public static class Routes
             return Results.NoContent();
         }).RequireAuthorization();
 
+        app.MapFiles();
         var tasks = app.MapGroup("/api/tasks").RequireAuthorization();
         tasks.MapGet("/{id:guid}/links", async (Guid id, LinkStore store, CancellationToken token) =>
             Results.Ok(new { items = await store.ListAsync(id, token) }));

@@ -239,7 +239,7 @@ class AppState(
                 autoRefresh = prefs["autoRefresh"] != false
                 confirmChanges = prefs["confirm"] != false
                 boot = false
-                page = "home"
+                page = if (u.id.startsWith("api:")) "cloud" else "home"
                 tab = "all"
                 if (autoRefresh && sources.isNotEmpty()) refresh()
             },
@@ -639,7 +639,7 @@ class AppState(
 
     fun back(): Boolean {
         if (page == "cloud") {
-            if (cloud.busy || cloud.links.busy) return true
+            if (cloud.busy || cloud.links.busy || cloud.files.busy || cloud.files.busy) return true
             when {
                 cloud.draft != null -> cloud.discardDraft()
                 cloud.selectedId != null -> cloud.selectedId = null

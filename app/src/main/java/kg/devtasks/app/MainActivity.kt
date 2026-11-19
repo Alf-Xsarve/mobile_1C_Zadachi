@@ -12,6 +12,62 @@ import kg.devtasks.app.ui.*
 class MainActivity : Activity() {
     lateinit var state: AppState
     private var shown: String? = null
+    private var fileTask: String? = null
+    private var savingFile: Pair<String, String>? = null
+
+    fun fileSection(body: android.widget.LinearLayout, task: String, draft: Boolean) {
+        val files = state.cloud.files
+        val title = android.widget.TextView(this)
+        title.text = "Файлы и фотографии (до 10 МБ)"
+        body.addView(title)
+        fun button(label: String, action: () -> Unit) {
+            body.addView(
+                android.widget.Button(this).apply {
+                    text = label
+                    isEnabled = !state.cloud.busy && !files.busy
+                    setOnClickListener { action() }
+                }
+            )
+        }
+        fun pick(images: Boolean) {
+            fileTask = task
+            startActivityForResult(
+                Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = if (images) "image/*" else "*/*"
+                },
+                701,
+            )
+        }
+        button("Выбрать фотографию") { pick(true) }
+        button("Выбрать документ") { pick(false) }
+        files.pending[task].orEmpty().forEach { file ->
+            button("Убрать: ${file.name}") {
+                files.pending[task]?.remove(file)
+                file.file.delete()
+                render()
+            }
+        }
+        if (!draft) {
+            button("Обновить вложения") { files.watch(task) }
+            if (files.pending[task].orEmpty().isNotEmpty())
+                button("Отправить выбранные файлы") { files.publish(task) { files.watch(task) } }
+            files.items.forEach { row ->
+                button("Сохранить: ${row["name"]}") {
+                    savingFile = task to row["id"].toString()
+                    startActivityForResult(
+                        Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "application/octet-stream"
+                            putExtra(Intent.EXTRA_TITLE, row["name"].toString())
+                        },
+                        702,
+                    )
+                }
+            }
+        }
+        files.error?.let { body.addView(android.widget.TextView(this).apply { text = it }) }
+    }
 
     fun openWebLink(address: String) {
         try {
@@ -48,6 +104,80 @@ class MainActivity : Activity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode == RESULT_OK && requestCode == 701) {
+            val uri = data?.data ?: return
+            val task = fileTask ?: return
+            val owner = state.cloud.account?.uid ?: return
+            state.job(
+                {
+                    var name = "Документ"
+                    contentResolver
+                        .query(
+                            uri,
+                            arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                            null,
+                            null,
+                            null,
+                        )
+                        ?.use { if (it.moveToFirst()) name = it.getString(0) }
+                    name =
+                        name
+                            .replace('/', '_')
+                            .replace('\\', '_')
+                            .filterNot { it.isISOControl() }
+                            .take(200)
+                            .ifBlank { "Документ" }
+                    val file = java.io.File.createTempFile("upload-", ".tmp", cacheDir)
+                    try {
+                        contentResolver.openInputStream(uri)!!.use { input ->
+                            file.outputStream().use { output ->
+                                val buf = ByteArray(65536)
+                                var total = 0
+                                while (true) {
+                                    val n = input.read(buf)
+                                    if (n < 0) break
+                                    total += n
+                                    if (total > 10485760)
+                                        throw kg.devtasks.app.core.UserError(
+                                            "Максимальный размер файла — 10 МБ."
+                                        )
+                                    output.write(buf, 0, n)
+                                }
+                                if (total == 0) throw kg.devtasks.app.core.UserError("Файл пуст.")
+                            }
+                        }
+                        kg.devtasks.app.data.Upload(name = name, file = file)
+                    } catch (e: Exception) {
+                        file.delete()
+                        throw e
+                    }
+                },
+                { upload ->
+                    if (
+                        owner == state.cloud.account?.uid &&
+                            (state.cloud.draft?.id == task || state.cloud.selectedId == task)
+                    )
+                        state.cloud.files.add(task, upload)
+                    else upload.file.delete()
+                },
+                { android.widget.Toast.makeText(this, it.message, android.widget.Toast.LENGTH_LONG).show() },
+            )
+            return
+        }
+        if (resultCode == RESULT_OK && requestCode == 702) {
+            val uri = data?.data ?: return
+            val file = savingFile ?: return
+            val token = state.cloud.token()
+            state.job(
+                {
+                    val bytes = state.cloud.api.file(file.first, file.second, token)
+                    contentResolver.openOutputStream(uri, "w")!!.use { it.write(bytes) }
+                },
+                { android.widget.Toast.makeText(this, "Файл сохранён", android.widget.Toast.LENGTH_SHORT).show() },
+                { android.widget.Toast.makeText(this, it.message, android.widget.Toast.LENGTH_LONG).show() },
+            )
+            return
+        }
         if (requestCode == QR_REQUEST && resultCode == RESULT_OK)
             data?.getStringExtra("code")?.let { state.importCode(it) }
     }
@@ -58,6 +188,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        fileTask=savedInstanceState?.getString("fileTask")
+        savedInstanceState?.getString("saveTask")?.let {task -> savedInstanceState.getString("saveId")?.let {savingFile=task to it} }
         state = lastNonConfigurationInstance as? AppState ?: AppState(applicationContext)
         state.render = { render() }
         render()
@@ -138,6 +270,12 @@ class MainActivity : Activity() {
         if (!state.back()) super.onBackPressed()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("fileTask",fileTask)
+        outState.putString("saveTask",savingFile?.first)
+        outState.putString("saveId",savingFile?.second)
+        super.onSaveInstanceState(outState)
+    }
     override fun onRetainNonConfigurationInstance(): Any = state
 
     override fun onStart() {

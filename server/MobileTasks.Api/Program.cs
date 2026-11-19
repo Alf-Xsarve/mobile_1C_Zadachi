@@ -18,8 +18,8 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 var databaseFile = Environment.GetEnvironmentVariable("MOBILETASKS_CONFIG_FILE")
     ?? Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "MobileTasksConfig", "database.json"));
 builder.Configuration.AddJsonFile(databaseFile, optional: true, reloadOnChange: false);
-builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 65536);
-builder.Services.Configure<IISServerOptions>(options => options.MaxRequestBodySize = 65536);
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 10485760);
+builder.Services.Configure<IISServerOptions>(options => options.MaxRequestBodySize = 10485760);
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<DatabaseProbe>();
 builder.Services.AddSingleton<Schema>();

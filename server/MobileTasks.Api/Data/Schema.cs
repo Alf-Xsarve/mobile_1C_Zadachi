@@ -4,7 +4,7 @@ namespace MobileTasks.Api.Data;
 
 public sealed class Schema(Database database, IConfiguration configuration)
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
     public async Task<int> VersionAsync(CancellationToken cancellationToken)
     {
         try
@@ -35,7 +35,7 @@ public sealed class Schema(Database database, IConfiguration configuration)
         if (version > CurrentVersion) throw new InvalidOperationException("Database schema is newer than this API.");
         for (var next = version + 1; next <= CurrentVersion; next++)
         {
-            var filename = next == 1 ? "001_initial.sql" : "002_links.sql";
+            var filename = next switch { 1 => "001_initial.sql", 2 => "002_links.sql", _ => "003_files.sql" };
             using var resource = typeof(Schema).Assembly.GetManifestResourceStream("MobileTasks.Api.Data.Migrations." + filename)
                 ?? throw new InvalidOperationException("Missing migration resource.");
             using var reader = new StreamReader(resource);

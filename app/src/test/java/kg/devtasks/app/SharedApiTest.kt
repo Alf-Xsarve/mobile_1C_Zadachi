@@ -80,4 +80,29 @@ class SharedApiTest {
         assertTrue(runCatching { SharedApi("https://user:password@example.test") }.isFailure)
         assertTrue(runCatching { SharedApi("https://example.test/wrong") }.isFailure)
     }
+
+    @Test
+    fun uploadsAndDownloadsOriginalBytes() {
+        MockWebServer().use { server ->
+            server.start(java.net.InetAddress.getByName("127.0.0.1"), 0)
+            val api = SharedApi(server.url("/").newBuilder().host("127.0.0.1").build().toString())
+            val id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+            val bytes = byteArrayOf(0, 1, 2, -1)
+            val file = java.io.File.createTempFile("binary-test", ".bin")
+            try {
+                file.writeBytes(bytes)
+                server.enqueue(MockResponse().setBody("{\"status\":\"ok\"}"))
+                api.file(id, id, "secret", file, "Фото.png")
+                val sent = server.takeRequest()
+                assertEquals("PUT", sent.method)
+                assertEquals("Bearer secret", sent.getHeader("Authorization"))
+                assertEquals("Фото.png", sent.requestUrl!!.queryParameter("name"))
+                assertArrayEquals(bytes, sent.body.readByteArray())
+                server.enqueue(MockResponse().setBody(okio.Buffer().write(bytes)))
+                assertArrayEquals(bytes, api.file(id, id, "secret"))
+            } finally {
+                file.delete()
+            }
+        }
+    }
 }

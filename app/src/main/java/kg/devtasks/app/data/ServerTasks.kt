@@ -30,6 +30,7 @@ class ServerTasks(
         get() = account?.displayName.orEmpty()
 
     val links = TaskLinks(this, changed)
+    val files = TaskFiles(this, changed)
     var ready = account != null
         private set
 
@@ -52,6 +53,7 @@ class ServerTasks(
         set(value) {
             field = value
             links.watch(value)
+            files.watch(value)
         }
 
     var draft: CloudDraft? = null
@@ -123,6 +125,7 @@ class ServerTasks(
             selectedId = null
             draft = null
             links.reset()
+            files.reset()
             loading = false
             busy = false
         }
@@ -184,6 +187,7 @@ class ServerTasks(
                 }
                 generation++
                 links.reset()
+                files.reset()
                 items = emptyList()
                 selectedId = null
                 draft = null
@@ -336,14 +340,21 @@ class ServerTasks(
         val bearer = token()
         val uid = account!!.uid
         fun publish() {
-            links.publish(d.id) { ok ->
-                busy = false
-                if (ok) {
-                    draft = null
-                    selectedId = d.id
-                    listen()
+            files.publish(d.id) uploaded@{ uploaded ->
+                if (!uploaded) {
+                    busy = false
+                    changed()
+                    return@uploaded
                 }
-                changed()
+                links.publish(d.id) { ok ->
+                    busy = false
+                    if (ok) {
+                        draft = null
+                        selectedId = d.id
+                        listen()
+                    }
+                    changed()
+                }
             }
         }
         if (d.created) {
@@ -422,6 +433,7 @@ class ServerTasks(
         generation++
         session = null
         links.reset()
+        files.reset()
         items = emptyList()
         ready = false
         busy = false
@@ -444,6 +456,7 @@ class ServerTasks(
     fun discardDraft() {
         val d = draft ?: return
         draft = null
+        files.discard(d.id)
         if (d.created) selectedId = d.id else links.discard(d.id)
     }
 
@@ -452,6 +465,7 @@ class ServerTasks(
         generation++
         main.removeCallbacks(poll)
         links.close()
+        files.reset()
         pool.shutdown()
     }
 }

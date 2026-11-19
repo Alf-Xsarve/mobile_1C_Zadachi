@@ -27,7 +27,10 @@ class SharedApi(val baseUrl: String = "https://alf-mobile-tasks.duckdns.org") {
             .build()
 
     init {
-        require(base.scheme == "https" || base.host in listOf("127.0.0.1", "::1", "localhost", "10.0.2.2"))
+        require(
+            base.scheme == "https" ||
+                base.host in listOf("127.0.0.1", "::1", "localhost", "10.0.2.2")
+        )
         require(
             base.username.isEmpty() &&
                 base.password.isEmpty() &&
@@ -82,6 +85,44 @@ class SharedApi(val baseUrl: String = "https://alf-mobile-tasks.duckdns.org") {
                 )
             if (response.code != 204 && row.isEmpty()) throw IOException("Некорректный ответ API")
             return row
+        }
+    }
+
+    fun file(
+        taskId: String,
+        id: String,
+        token: String,
+        upload: java.io.File? = null,
+        name: String = "",
+    ): ByteArray {
+        require(GUID.matches(taskId) && GUID.matches(id))
+        val url =
+            base
+                .newBuilder()
+                .encodedPath("/api/tasks/$taskId/files/$id")
+                .apply { if (upload != null) addQueryParameter("name", name) }
+                .build()
+        val req = Request.Builder().url(url).header("Authorization", "Bearer $token")
+        if (upload != null)
+            req.put(upload.readBytes().toRequestBody("application/octet-stream".toMediaType()))
+        http.newCall(req.build()).execute().use {
+            if (!it.isSuccessful)
+                throw SharedApiError(
+                    it.code,
+                    "file_error",
+                    "Не удалось передать файл (HTTP ${it.code}).",
+                )
+            if (upload != null) return byteArrayOf()
+            val input = it.body?.byteStream() ?: throw IOException("Пустой ответ")
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(65536)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                if (out.size() + n > 10485760) throw IOException("Файл слишком велик")
+                out.write(buf, 0, n)
+            }
+            return out.toByteArray()
         }
     }
 

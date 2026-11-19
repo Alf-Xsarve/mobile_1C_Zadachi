@@ -108,8 +108,8 @@ try
     var concurrentMigrations = await Task.WhenAll(Migrate(config), Migrate(config));
     Check(concurrentMigrations.All(code => code == 0), "concurrent migrations serialize safely");
     Check(await Migrate(config) == 0, "migration can be repeated");
-    Check(Convert.ToInt64(await Scalar("SELECT count(*) FROM mobile_tasks.schema_migrations")) == 2, "two migration records");
-    Check((await Request("GET", "/health/schema")).Body?["schemaVersion"]?.GetValue<int>() == 2, "schema readiness version 2");
+    Check(Convert.ToInt64(await Scalar("SELECT count(*) FROM mobile_tasks.schema_migrations")) == 3, "three migration records");
+    Check((await Request("GET", "/health/schema")).Body?["schemaVersion"]?.GetValue<int>() == 3, "schema readiness version 3");
     Check((await Request("GET", "/api/tasks")).Code == 401, "anonymous tasks denied");
     var password = "valid-test-password-2026";
     var bad = await Request("POST", "/api/auth/register", new { email = "bad", name = "X", password });
@@ -165,7 +165,7 @@ try
     Check((await Request("POST", $"/api/tasks/{taskId}/complete", token: winner)).Code == 200, "complete retry idempotent");
     Check((await Request("GET", "/api/tasks?mine=true&status=done", token: winner)).Body!["items"]!.AsArray().Count == 1, "own completed filter");
     Check(Convert.ToInt64(await Scalar("SELECT count(*) FROM mobile_tasks.task_events WHERE task_id=$1", taskId)) == 4, "created/claimed/comment/completed events persisted exactly once");
-    await Execute("DROP TABLE mobile_tasks.task_links; DELETE FROM mobile_tasks.schema_migrations WHERE version=2");
+    await Execute("DROP TABLE mobile_tasks.task_files; DROP TABLE mobile_tasks.task_links; DELETE FROM mobile_tasks.schema_migrations WHERE version>=2");
     Check((await Request("GET", "/health/schema")).Code == 503, "v1 schema requires update");
     Check(await Migrate(config) == 0 && (await Request("GET", $"/api/tasks/{taskId}", token: tokenA)).Code == 200, "v1 upgrade preserves tasks and accounts");
     var linkId = Guid.NewGuid();
@@ -186,6 +186,25 @@ try
         new { id=linkId,name="Conflicting",url="https://example.test/",kind="web" }
     } }, tokenA)).Code == 409, "conflicting link batch rejected");
     Check(Convert.ToInt64(await Scalar("SELECT count(*) FROM mobile_tasks.task_links WHERE id=$1",rollbackId)) == 0, "batch rollback leaves no partial links");
+    var fileId=Guid.NewGuid();
+    async Task<int> UploadFile(string authToken, Guid fileKey, string filename, byte[] bytes) {
+        using var req=new HttpRequestMessage(HttpMethod.Put,$"/api/tasks/{taskId}/files/{fileKey}?name="+Uri.EscapeDataString(filename));
+        req.Headers.Authorization=new AuthenticationHeaderValue("Bearer",authToken);req.Content=new ByteArrayContent(bytes);
+        using var res=await http.SendAsync(req);return (int)res.StatusCode;
+    }
+    var payload=Encoding.UTF8.GetBytes("Binary test content \0 image");
+    Check(await UploadFile(tokenA,fileId,"Фото.png",payload)==200,"file upload");
+    Check(await UploadFile(tokenA,fileId,"Фото.png",payload)==200,"file upload retry idempotent");
+    Check(await UploadFile(tokenB,fileId,"Фото.png",payload)==409,"file ownership protected");
+    Check(await UploadFile(tokenA,Guid.NewGuid(),"../bad",payload)==400,"filename traversal rejected");
+    Check(await UploadFile(tokenA,Guid.NewGuid(),"empty",[])==400,"empty file rejected");
+    Check((await Request("GET",$"/api/tasks/{taskId}/files",token:tokenC)).Body!["items"]!.AsArray().Count==1,"files visible to registered users");
+    using(var req=new HttpRequestMessage(HttpMethod.Get,$"/api/tasks/{taskId}/files/{fileId}")) {
+        req.Headers.Authorization=new AuthenticationHeaderValue("Bearer",tokenB);
+        using var res=await http.SendAsync(req);
+        Check(res.IsSuccessStatusCode && (await res.Content.ReadAsByteArrayAsync()).SequenceEqual(payload),"binary download roundtrip");
+    }
+    Check((await Request("GET",$"/api/tasks/{taskId}/files/{fileId}")).Code==401,"anonymous download rejected");
     api.Kill(entireProcessTree: true);
     await api.WaitForExitAsync();
     previousLogs = await apiOut + await apiErr;

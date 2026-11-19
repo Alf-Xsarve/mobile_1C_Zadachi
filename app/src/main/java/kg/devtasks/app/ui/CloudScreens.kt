@@ -147,6 +147,12 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
                 addView(filters)
             }
         )
+        root.addView(
+            u.button("Задачи 1С и настройки", secondary = true) {
+                a.state.page = "home"
+                a.render()
+            }
+        )
         root.addView(tools)
         root.addView(
             u.text(
@@ -272,16 +278,17 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
         if (d.created)
             body.addView(
                 u.text(
-                    "Задача создана. Осталось отправить добавленные ссылки.",
+                    "Задача создана. Осталось отправить добавленные материалы.",
                     13f,
                     color = u.muted,
                 )
             )
+        a.fileSection(body, d.id, true)
         TaskLinkViews(a, u).section(body, d.id, true)
         body.addView(
             u.button(
                 if (c.busy || c.links.busy) "Сохраняем…"
-                else if (d.created) "Отправить ссылки" else "Создать задачу",
+                else if (d.created) "Отправить вложения и ссылки" else "Создать задачу",
                 !c.busy && !c.links.busy,
             ) {
                 c.create()
@@ -332,6 +339,7 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
             body.addView(
                 u.button("Завершить общую задачу", !c.busy && !c.links.busy) { confirm(task, true) }
             )
+        a.fileSection(body, task.id, false)
         TaskLinkViews(a, u).section(body, task.id, false)
         u.fill(root, u.scroll(body).apply { tag = "scroll" })
     }
