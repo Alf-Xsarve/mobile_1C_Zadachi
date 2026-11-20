@@ -31,7 +31,7 @@ public sealed class TaskStore(Database database)
 
     public async Task<TaskPage> ListAsync(Guid userId, string? status, bool mine, int limit, string? cursor, CancellationToken token)
     {
-        if (status is not (null or "" or "new" or "active" or "done")) throw new ApiError(400, "invalid_status", "Неизвестный статус.");
+        if (status is not (null or "" or "new" or "active" or "done" or "canceled")) throw new ApiError(400, "invalid_status", "Неизвестный статус.");
         if (limit is < 1 or > 100) throw new ApiError(400, "invalid_limit", "Размер страницы: от 1 до 100.");
         var page = PageCursor.Parse(cursor);
         await using var command = database.Source.CreateCommand(SelectTask + """
@@ -46,7 +46,7 @@ public sealed class TaskStore(Database database)
         var tasks = new List<TaskView>();
         await using var reader = await command.ExecuteReaderAsync(token);
         while (await reader.ReadAsync(token)) tasks.Add(ReadTask(reader));
-        string? next = tasks.Count > limit ? PageCursor.Encode(tasks[limit-1].CreatedAt, tasks[limit-1].Id) : null;
+        string? next = tasks.Count > limit ? PageCursor.Encode(tasks[limit - 1].CreatedAt, tasks[limit - 1].Id) : null;
         return new(tasks.Take(limit).ToArray(), next);
     }
 
@@ -69,7 +69,11 @@ public sealed class TaskStore(Database database)
         insert.Parameters.AddWithValue(description);
         insert.Parameters.AddWithValue(actor);
         var created = await insert.ExecuteNonQueryAsync(token) == 1;
-        if (created) await EventAsync(connection, transaction, id, actor, "created", "", token);
+        if (created)
+        {
+            await EventAsync(connection, transaction, id, actor, "created", "", token);
+            await using var push = new NpgsqlCommand("INSERT INTO mobile_tasks.push_queue(actor,kind) VALUES($1,'common')", connection, transaction); push.Parameters.AddWithValue(actor); await push.ExecuteNonQueryAsync(token);
+        }
         else
         {
             await using var existing = new NpgsqlCommand("SELECT author_id,title,description FROM mobile_tasks.tasks WHERE id=$1", connection, transaction);
@@ -105,11 +109,38 @@ public sealed class TaskStore(Database database)
             if (!await reader.ReadAsync(token)) throw new ApiError(404, "task_not_found", "Задача не найдена.");
             var own = !reader.IsDBNull(1) && reader.GetGuid(1) == actor;
             var status = reader.GetString(0);
-            if (!(own && (complete ? status == "done" : status is "active" or "done")))
+            if (!(own && (complete ? status == "done" : status is "active" or "done" or "canceled")))
                 throw new ApiError(409, "task_state_conflict", complete ? "Завершить задачу может только её исполнитель." : "Задачу уже взял другой пользователь.");
         }
         await transaction.CommitAsync(token);
         return await GetAsync(id, token);
+    }
+
+    public async Task<TaskView> ActionAsync(Guid id, Guid actor, ActionRequest request, CancellationToken ct)
+    {
+        if (request.Action is not ("release" or "cancel" or "transfer")) throw new ApiError(400, "invalid_action", "Неизвестное действие.");
+        await using var connection = await database.Source.OpenConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        var current = await GetAsync(id, ct);
+        if (request.Action == "cancel" ? current.AuthorId != actor : current.AssigneeId != actor)
+            throw new ApiError(403, "action_forbidden", "Недостаточно прав для этого действия.");
+        if (current.Status is "done" or "canceled" || (request.Action != "cancel" && current.Status != "active"))
+            throw new ApiError(409, "state_conflict", "Обновите состояние задачи.");
+        if (request.Action == "transfer" && (request.Target is null || request.Target == actor || request.Target == Guid.Empty)) throw new ApiError(400, "invalid_target", "Выберите другого пользователя.");
+        if (request.Action == "transfer")
+        {
+            await using var target = new NpgsqlCommand("SELECT id FROM mobile_tasks.users WHERE id=$1", connection, tx);
+            target.Parameters.AddWithValue(request.Target!.Value);
+            if (await target.ExecuteScalarAsync(ct) is null) throw new ApiError(400, "invalid_target", "Пользователь не найден.");
+        }
+        var status = request.Action == "cancel" ? "canceled" : request.Action == "release" ? "new" : "active";
+        await using var cmd = new NpgsqlCommand("UPDATE mobile_tasks.tasks SET status=$2,assignee_id=$3,completed_at=NULL,updated_at=now() WHERE id=$1 AND status=$4 AND assignee_id IS NOT DISTINCT FROM $5", connection, tx);
+        cmd.Parameters.AddWithValue(id); cmd.Parameters.AddWithValue(status);
+        cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Uuid, Value = request.Action == "transfer" ? (object)request.Target!.Value : DBNull.Value });
+        cmd.Parameters.AddWithValue(current.Status); cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Uuid, Value = (object?)current.AssigneeId ?? DBNull.Value });
+        if (await cmd.ExecuteNonQueryAsync(ct) != 1) throw new ApiError(409, "state_conflict", "Задача изменилась. Обновите список.");
+        await EventAsync(connection, tx, id, actor, request.Action == "release" ? "released" : request.Action == "cancel" ? "canceled" : "transferred", request.Target?.ToString() ?? "", ct);
+        await tx.CommitAsync(ct); return await GetAsync(id, ct);
     }
 
     private static async Task EventAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
@@ -143,7 +174,7 @@ public sealed class TaskStore(Database database)
         await using var reader = await command.ExecuteReaderAsync(token);
         while (await reader.ReadAsync(token)) items.Add(new(reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2),
             reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetDateTime(6)));
-        var next = items.Count > limit ? PageCursor.Encode(items[limit-1].CreatedAt, items[limit-1].Id) : null;
+        var next = items.Count > limit ? PageCursor.Encode(items[limit - 1].CreatedAt, items[limit - 1].Id) : null;
         return new(items.Take(limit).ToArray(), next);
     }
 

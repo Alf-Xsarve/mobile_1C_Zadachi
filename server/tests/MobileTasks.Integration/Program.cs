@@ -45,7 +45,7 @@ await Execute("DROP SCHEMA IF EXISTS mobile_tasks CASCADE");
 var config = Path.Combine(output, "fixture-config.json");
 await File.WriteAllTextAsync(config, JsonSerializer.Serialize(new { Database = new {
     Host = "127.0.0.1", Port = 15439, Name = "mobile_tasks", Username = "mobile_tasks_api", Password = fixturePassword
-}}));
+}, Push = new { OneCSecret = "fixture-only-webhook-secret-123456789" }}));
 Process Start(bool migrate, string configPath)
 {
     var info = new ProcessStartInfo(dotnet) { UseShellExecute = false, CreateNoWindow = true,
@@ -108,8 +108,8 @@ try
     var concurrentMigrations = await Task.WhenAll(Migrate(config), Migrate(config));
     Check(concurrentMigrations.All(code => code == 0), "concurrent migrations serialize safely");
     Check(await Migrate(config) == 0, "migration can be repeated");
-    Check(Convert.ToInt64(await Scalar("SELECT count(*) FROM mobile_tasks.schema_migrations")) == 3, "three migration records");
-    Check((await Request("GET", "/health/schema")).Body?["schemaVersion"]?.GetValue<int>() == 3, "schema readiness version 3");
+    Check(Convert.ToInt64(await Scalar("SELECT count(*) FROM mobile_tasks.schema_migrations")) == 4, "four migration records");
+    Check((await Request("GET", "/health/schema")).Body?["schemaVersion"]?.GetValue<int>() == 4, "schema readiness version 4");
     Check((await Request("GET", "/api/tasks")).Code == 401, "anonymous tasks denied");
     var password = "valid-test-password-2026";
     var bad = await Request("POST", "/api/auth/register", new { email = "bad", name = "X", password });
@@ -165,7 +165,7 @@ try
     Check((await Request("POST", $"/api/tasks/{taskId}/complete", token: winner)).Code == 200, "complete retry idempotent");
     Check((await Request("GET", "/api/tasks?mine=true&status=done", token: winner)).Body!["items"]!.AsArray().Count == 1, "own completed filter");
     Check(Convert.ToInt64(await Scalar("SELECT count(*) FROM mobile_tasks.task_events WHERE task_id=$1", taskId)) == 4, "created/claimed/comment/completed events persisted exactly once");
-    await Execute("DROP TABLE mobile_tasks.task_files; DROP TABLE mobile_tasks.task_links; DELETE FROM mobile_tasks.schema_migrations WHERE version>=2");
+    await Execute("DROP TABLE mobile_tasks.push_queue; DROP TABLE mobile_tasks.devices; DROP TABLE mobile_tasks.task_files; DROP TABLE mobile_tasks.task_links; DELETE FROM mobile_tasks.schema_migrations WHERE version>=2");
     Check((await Request("GET", "/health/schema")).Code == 503, "v1 schema requires update");
     Check(await Migrate(config) == 0 && (await Request("GET", $"/api/tasks/{taskId}", token: tokenA)).Code == 200, "v1 upgrade preserves tasks and accounts");
     var linkId = Guid.NewGuid();
@@ -205,6 +205,30 @@ try
         Check(res.IsSuccessStatusCode && (await res.Content.ReadAsByteArrayAsync()).SequenceEqual(payload),"binary download roundtrip");
     }
     Check((await Request("GET",$"/api/tasks/{taskId}/files/{fileId}")).Code==401,"anonymous download rejected");
+    var actionId=Guid.NewGuid();
+    await Request("POST","/api/tasks",new{id=actionId,title="Действия задачи"},tokenA);
+    var idB=second.Body!["user"]!["id"]!.GetValue<string>();
+    var idC=third.Body!["user"]!["id"]!.GetValue<string>();
+    Check((await Request("GET","/api/users",token:tokenA)).Body!["items"]!.AsArray().Count==3,"list users for transfer");
+    await Request("POST",$"/api/tasks/{actionId}/claim",token:tokenB);
+    Check((await Request("POST",$"/api/tasks/{actionId}/action",new{action="release"},tokenC)).Code==403,"other user cannot release");
+    Check((await Request("POST",$"/api/tasks/{actionId}/action",new{action="release"},tokenB)).Body?["status"]?.GetValue<string>()=="new","assignee releases task");
+    await Request("POST",$"/api/tasks/{actionId}/claim",token:tokenB);
+    Check((await Request("POST",$"/api/tasks/{actionId}/action",new{action="transfer",target=idB},tokenB)).Code==400,"self transfer rejected");
+    Check((await Request("POST",$"/api/tasks/{actionId}/action",new{action="transfer",target=idC},tokenB)).Body?["assigneeId"]?.GetValue<string>()==idC,"transfer changes assignee");
+    Check((await Request("POST",$"/api/tasks/{actionId}/action",new{action="cancel"},tokenC)).Code==403,"only author can cancel");
+    Check((await Request("POST",$"/api/tasks/{actionId}/action",new{action="cancel"},tokenA)).Body?["status"]?.GetValue<string>()=="canceled","author cancels task");
+    Check((await Request("POST",$"/api/tasks/{actionId}/claim",token:tokenB)).Code==409,"canceled task cannot be claimed");
+    Check(Convert.ToInt64(await Scalar("SELECT count(*) FROM mobile_tasks.push_queue WHERE kind='common'"))>=1,"new task push persists in outbox");
+    Check((await Request("POST","/api/devices",new{id=Guid.NewGuid(),token="test-device-token"})).Code==401,"device requires auth");
+    Check((await Request("POST","/api/devices",new{id=Guid.NewGuid(),token="test-device-token"},tokenA)).Code==200,"register push device");
+    Check((await Request("POST","/api/integrations/1c/new-task",new{taskId=Guid.NewGuid(),source="https://example.test/base/odata/standard.odata/"})).Code==401,"webhook rejects missing key");
+    http.DefaultRequestHeaders.Add("X-OneC-Key","fixture-only-webhook-secret-123456789");
+    var webhook = new { taskId=Guid.NewGuid(),source="https://example.test/base/odata/standard.odata/" };
+    Check((await Request("POST","/api/integrations/1c/new-task",webhook)).Code==200,"authenticated 1C webhook queues push");
+    Check((await Request("POST","/api/integrations/1c/new-task",webhook)).Code==200,"1C webhook retry accepted");
+    Check(Convert.ToInt64(await Scalar("SELECT count(*) FROM mobile_tasks.push_queue WHERE kind='odata'"))==1,"1C duplicate event removed");
+    http.DefaultRequestHeaders.Remove("X-OneC-Key");
     api.Kill(entireProcessTree: true);
     await api.WaitForExitAsync();
     previousLogs = await apiOut + await apiErr;

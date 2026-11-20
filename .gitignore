@@ -19,3 +19,6 @@ firebase/.firebase/
 # Server database credentials live outside the repository.
 **/MobileTasksConfig/
 **/database.json
+
+*firebase-adminsdk*.json
+**/service-account*.json

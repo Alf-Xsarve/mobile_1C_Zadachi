@@ -12,6 +12,9 @@ import kg.devtasks.app.ui.*
 class MainActivity : Activity() {
     lateinit var state: AppState
     private var shown: String? = null
+    private var pushStarted = false
+    private var notificationPermissionAsked = false
+    private var pushSources = ""
     private var fileTask: String? = null
     private var savingFile: Pair<String, String>? = null
 
@@ -53,6 +56,23 @@ class MainActivity : Activity() {
             if (files.pending[task].orEmpty().isNotEmpty())
                 button("Отправить выбранные файлы") { files.publish(task) { files.watch(task) } }
             files.items.forEach { row ->
+                button("Просмотреть: ${row["name"]}") {
+                    val token = state.cloud.token()
+                    state.job(
+                        { state.cloud.api.file(task, row["id"].toString(), token) },
+                        { bytes ->
+                            kg.devtasks.app.ui.FilePreview.show(this, row["name"].toString(), bytes)
+                        },
+                        {
+                            android.widget.Toast.makeText(
+                                    this,
+                                    it.message,
+                                    android.widget.Toast.LENGTH_LONG,
+                                )
+                                .show()
+                        },
+                    )
+                }
                 button("Сохранить: ${row["name"]}") {
                     savingFile = task to row["id"].toString()
                     startActivityForResult(
@@ -160,7 +180,14 @@ class MainActivity : Activity() {
                         state.cloud.files.add(task, upload)
                     else upload.file.delete()
                 },
-                { android.widget.Toast.makeText(this, it.message, android.widget.Toast.LENGTH_LONG).show() },
+                {
+                    android.widget.Toast.makeText(
+                            this,
+                            it.message,
+                            android.widget.Toast.LENGTH_LONG,
+                        )
+                        .show()
+                },
             )
             return
         }
@@ -173,8 +200,22 @@ class MainActivity : Activity() {
                     val bytes = state.cloud.api.file(file.first, file.second, token)
                     contentResolver.openOutputStream(uri, "w")!!.use { it.write(bytes) }
                 },
-                { android.widget.Toast.makeText(this, "Файл сохранён", android.widget.Toast.LENGTH_SHORT).show() },
-                { android.widget.Toast.makeText(this, it.message, android.widget.Toast.LENGTH_LONG).show() },
+                {
+                    android.widget.Toast.makeText(
+                            this,
+                            "Файл сохранён",
+                            android.widget.Toast.LENGTH_SHORT,
+                        )
+                        .show()
+                },
+                {
+                    android.widget.Toast.makeText(
+                            this,
+                            it.message,
+                            android.widget.Toast.LENGTH_LONG,
+                        )
+                        .show()
+                },
             )
             return
         }
@@ -186,10 +227,18 @@ class MainActivity : Activity() {
         private const val QR_REQUEST = 700
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        render()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        fileTask=savedInstanceState?.getString("fileTask")
-        savedInstanceState?.getString("saveTask")?.let {task -> savedInstanceState.getString("saveId")?.let {savingFile=task to it} }
+        fileTask = savedInstanceState?.getString("fileTask")
+        savedInstanceState?.getString("saveTask")?.let { task ->
+            savedInstanceState.getString("saveId")?.let { savingFile = task to it }
+        }
         state = lastNonConfigurationInstance as? AppState ?: AppState(applicationContext)
         state.render = { render() }
         render()
@@ -203,6 +252,35 @@ class MainActivity : Activity() {
 
     fun render() {
         if (isFinishing || isDestroyed) return
+        if (!state.boot && state.user != null)
+            intent.getStringExtra("push_kind")?.let { kind ->
+                val cloud=state.cloud
+                if(cloud.busy || cloud.files.busy || cloud.links.busy || cloud.draft!=null)return@let
+                intent.removeExtra("push_kind")
+                state.page = if (kind == "odata") "home" else "cloud"
+                if(kind=="odata")window.decorView.post{state.refresh()}
+                else {cloud.selectedId=null;window.decorView.post{cloud.listen()}}
+            }
+        val sourceSignature = state.sources.filter { it.enabled }.joinToString { it.url }
+        if (
+            state.cloud.account != null &&
+                !state.boot &&
+                (!pushStarted || pushSources != sourceSignature)
+        ) {
+            pushSources = sourceSignature
+            pushStarted = true
+            kg.devtasks.app.data.TaskMessaging.start(applicationContext)
+            if (
+                android.os.Build.VERSION.SDK_INT >= 33 &&
+                    !notificationPermissionAsked &&
+                    checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionAsked = true
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 703)
+            }
+        }
+        if (state.cloud.account == null) pushStarted = false
         val focus = currentFocus as? EditText
         val tag = focus?.tag
         val selection = focus?.selectionStart ?: 0
@@ -271,11 +349,12 @@ class MainActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putString("fileTask",fileTask)
-        outState.putString("saveTask",savingFile?.first)
-        outState.putString("saveId",savingFile?.second)
+        outState.putString("fileTask", fileTask)
+        outState.putString("saveTask", savingFile?.first)
+        outState.putString("saveId", savingFile?.second)
         super.onSaveInstanceState(outState)
     }
+
     override fun onRetainNonConfigurationInstance(): Any = state
 
     override fun onStart() {

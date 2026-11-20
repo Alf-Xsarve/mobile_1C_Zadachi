@@ -17,6 +17,7 @@ data class CloudTask(
                 "new" -> "Свободно"
                 "active" -> "В процессе"
                 "done" -> "Выполнено"
+                "canceled" -> "Отменено"
                 else -> "Неизвестный статус"
             }
 

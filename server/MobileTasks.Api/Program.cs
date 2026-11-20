@@ -27,6 +27,7 @@ builder.Services.Configure<PasswordHasherOptions>(options => options.IterationCo
 builder.Services.AddSingleton<IPasswordHasher<UserView>, PasswordHasher<UserView>>();
 builder.Services.AddSingleton<Accounts>();
 builder.Services.AddSingleton<TaskStore>();
+builder.Services.AddHostedService<PushService>();
 builder.Services.AddSingleton<LinkStore>();
 builder.Services.AddAuthentication("Session").AddScheme<AuthenticationSchemeOptions, SessionAuthentication>("Session", null);
 builder.Services.AddAuthorization();
@@ -122,5 +123,10 @@ app.MapGet("/health/schema", async (HttpContext context, Schema schema) =>
     return Results.Json(new { status = version == Schema.CurrentVersion ? "ok" : "migration_required",
         schemaVersion = version, requiredVersion = Schema.CurrentVersion }, statusCode: version == Schema.CurrentVersion ? 200 : 503);
 });
+app.MapGet("/health/push",(HttpContext context,IConfiguration configuration)=> {
+ if(!IsLocal(context))return Results.NotFound();
+ return Results.Ok(new { configured=File.Exists(configuration["Push:ServiceAccountFile"]),oneCConfigured=(configuration["Push:OneCSecret"]?.Length??0)>=32 });
+});
 app.MapTaskApi();
+PushService.Map(app);
 app.Run();

@@ -23,7 +23,15 @@ public static class Routes
         }).RequireAuthorization();
 
         app.MapFiles();
+        app.MapGet("/api/users", async (MobileTasks.Api.Data.Database db, CancellationToken ct) =>
+        {
+            await using var cmd = db.Source.CreateCommand("SELECT id,name FROM mobile_tasks.users ORDER BY name,id");
+            await using var reader = await cmd.ExecuteReaderAsync(ct); var users = new List<object>();
+            while (await reader.ReadAsync(ct)) users.Add(new { id = reader.GetGuid(0), name = reader.GetString(1) });
+            return Results.Ok(new { items = users });
+        }).RequireAuthorization();
         var tasks = app.MapGroup("/api/tasks").RequireAuthorization();
+        tasks.MapPost("/{id:guid}/action", async (Guid id, ActionRequest request, HttpContext ctx, TaskStore store, CancellationToken ct) => Results.Ok(await store.ActionAsync(id, Actor(ctx), request, ct)));
         tasks.MapGet("/{id:guid}/links", async (Guid id, LinkStore store, CancellationToken token) =>
             Results.Ok(new { items = await store.ListAsync(id, token) }));
         tasks.MapPost("/{id:guid}/links", async (Guid id, LinksRequest request, HttpContext context, LinkStore store, CancellationToken token) =>

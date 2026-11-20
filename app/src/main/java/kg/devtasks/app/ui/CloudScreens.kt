@@ -339,6 +339,48 @@ class CloudScreens(private val a: MainActivity, private val u: Ui) {
             body.addView(
                 u.button("Завершить общую задачу", !c.busy && !c.links.busy) { confirm(task, true) }
             )
+        if (task.status == "active" && task.assigneeId == uid) {
+            body.addView(
+                u.button("Отказаться от задания", !c.busy, true) {
+                    AlertDialog.Builder(a)
+                        .setTitle("Вернуть задачу в свободные?")
+                        .setNegativeButton("Нет", null)
+                        .setPositiveButton("Отказаться") { _, _ -> c.action(task, "release") }
+                        .show()
+                }
+            )
+            body.addView(
+                u.button("Передать пользователю", !c.busy, true) {
+                    c.users { rows ->
+                        if (a.isFinishing || a.isDestroyed) return@users
+                        val users = rows.filter { it["id"].text() != uid }
+                        AlertDialog.Builder(a)
+                            .setTitle("Новый исполнитель")
+                            .setItems(users.map { it["name"].text() }.toTypedArray()) { _, index ->
+                                AlertDialog.Builder(a)
+                                    .setTitle("Передать задание?")
+                                    .setMessage(users[index]["name"].text())
+                                    .setNegativeButton("Нет", null)
+                                    .setPositiveButton("Передать") { _, _ ->
+                                        c.action(task, "transfer", users[index]["id"].text())
+                                    }
+                                    .show()
+                            }
+                            .show()
+                    }
+                }
+            )
+        }
+        if (task.authorId == uid && task.status in listOf("new", "active"))
+            body.addView(
+                u.button("Отменить задание", !c.busy, true) {
+                    AlertDialog.Builder(a)
+                        .setTitle("Отменить задание?")
+                        .setNegativeButton("Нет", null)
+                        .setPositiveButton("Отменить задание") { _, _ -> c.action(task, "cancel") }
+                        .show()
+                }
+            )
         a.fileSection(body, task.id, false)
         TaskLinkViews(a, u).section(body, task.id, false)
         u.fill(root, u.scroll(body).apply { tag = "scroll" })

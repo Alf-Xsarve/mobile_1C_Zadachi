@@ -1,7 +1,7 @@
 # Подключение PostgreSQL к API в IIS
 
 Инструкция для Windows Server 2022 и PostgreSQL на том же сервере, что и IIS.
-Android 2.1.0 хранит общие задачи в отдельной базе **mobile_tasks** через API.
+Android 2.2.0 хранит общие задачи в отдельной базе **mobile_tasks** через API.
 Сначала подготовьте роль и базу, затем настройте соединение и примените миграции.
 Если база и роль уже созданы, переходите к шагу 2.
 
@@ -135,12 +135,12 @@ Windows. В частности, убедитесь, что пул может ч�
 & 'D:\WebApps\MobileTasksApi\MobileTasks.Api.exe' --migrate
 ```
 
-Ожидается `Migration completed. Schema version: 3`. Миграция создаёт отдельную схему `mobile_tasks` и таблицы users, sessions, tasks, task_events, task_links, task_files, schema_migrations. Она запускается явно, повторный запуск допустим.
+Ожидается `Migration completed. Schema version: 4`. Миграция создаёт отдельную схему `mobile_tasks` и таблицы users, sessions, tasks, task_events, task_links, task_files, schema_migrations. Она запускается явно, повторный запуск допустим.
 
 Запустите пул и откройте на сервере `http://127.0.0.1:8088/health/schema`:
 
 ```json
-{"status":"ok","schemaVersion":3,"requiredVersion":3}
+{"status":"ok","schemaVersion":4,"requiredVersion":4}
 ```
 
 Подробности обновления и резервной копии — [TASKS_SETUP.md](TASKS_SETUP.md).

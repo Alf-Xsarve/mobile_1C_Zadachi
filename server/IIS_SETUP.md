@@ -122,11 +122,11 @@ http://127.0.0.1:8088/health/live
 & 'D:\WebApps\MobileTasksApi\MobileTasks.Api.exe' --migrate
 ```
 
-5. Дождитесь `Migration completed. Schema version: 3`, запустите пул.
+5. Дождитесь `Migration completed. Schema version: 4`, запустите пул.
 6. Проверьте `http://127.0.0.1:8088/health/schema`:
 
 ```json
-{"status":"ok","schemaVersion":3,"requiredVersion":3}
+{"status":"ok","schemaVersion":4,"requiredVersion":4}
 ```
 
 Настройки PostgreSQL считываются из `D:\WebApps\MobileTasksConfig\database.json`. Пароль в GitHub и APK не включается. При уже работающем сервере файл конфигурации сохраняйте прежним.

@@ -35,3 +35,5 @@ public sealed record PageCursor(DateTime Time, Guid Id)
     public static string Encode(DateTimeOffset time, Guid id) =>
         WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(time.ToString("O", CultureInfo.InvariantCulture) + "|" + id));
 }
+
+public sealed record ActionRequest(string Action, Guid? Target);

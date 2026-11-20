@@ -421,6 +421,47 @@ class ServerTasks(
         )
     }
 
+    fun action(task: CloudTask, action: String, target: String? = null) {
+        if (busy || files.busy || links.busy || !ready) return
+        val bearer = token()
+        val userId = account!!.uid
+        busy = true
+        error = null
+        changed()
+        work(
+            {
+                cacheMutation(
+                    userId,
+                    api.request(
+                        "POST",
+                        "/api/tasks/${task.id}/action",
+                        bearer,
+                        mapOf("action" to action, "target" to target),
+                    ),
+                )
+            },
+            {
+                replace(it)
+                busy = false
+                listen()
+                changed()
+            },
+            {
+                busy = false
+                failed(it)
+            },
+        )
+    }
+
+    fun users(done: (List<Row>) -> Unit) {
+        val bearer = token()
+        work(
+            { api.request("GET", "/api/users", bearer)["items"].rows() },
+            { done(it) },
+            { failed(it) },
+        )
+    }
+
     fun signOut() {
         val bearer = session?.get("token").text()
         try {

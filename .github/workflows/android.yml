@@ -18,6 +18,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - run: chmod +x gradlew
+      - name: Configure Firebase Messaging
+        env:
+          FIREBASE_ANDROID_CONFIG: ${{ secrets.FIREBASE_ANDROID_CONFIG }}
+        run: |
+          if [ -n "$FIREBASE_ANDROID_CONFIG" ]; then
+            printf '%s' "$FIREBASE_ANDROID_CONFIG" > app/google-services.json
+          fi
       - run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
