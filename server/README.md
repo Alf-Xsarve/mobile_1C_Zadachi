@@ -2,13 +2,13 @@
 
 ASP.NET Core 10 API с PostgreSQL: регистрация, вход и сессии, задачи,
 назначение исполнителя, завершение, комментарии, история и постраничные списки.
-Android 2.2.0 использует этот API по HTTPS. Схема PostgreSQL: версия 4.
+Android 2.2.1 использует этот API по HTTPS. Схема PostgreSQL: версия 4.
 Файлы и фотографии до 10 МБ сохраняются в PostgreSQL; также поддерживаются внешние ссылки и контакты.
 
 **Полная установка IIS и HTTPS с нуля:** [IIS_SETUP.md](IIS_SETUP.md).
 **Создание роли/базы PostgreSQL и подключение:** [DATABASE_SETUP.md](DATABASE_SETUP.md).
 **Обновление установленного API и создание таблиц:** [TASKS_SETUP.md](TASKS_SETUP.md).
-**Push и интеграция событий 1С:** [PUSH_SETUP.md](PUSH_SETUP.md).
+**Push общих задач:** [PUSH_SETUP.md](PUSH_SETUP.md).
 **Контракт методов:** [API.md](API.md).
 
 ## Подготовлено на сервере
@@ -73,7 +73,7 @@ Android 2.2.0 использует этот API по HTTPS. Схема PostgreSQ
 
 ## Проверка с телефона
 
-После настройки HTTPS откройте `https://alf-mobile-tasks.duckdns.org/health/live`, установите APK 2.2.0 и зарегистрируйте новый аккаунт. Общие задачи используют PostgreSQL; тестовые аккаунты и задачи Firebase не переносятся. Для обновления уже установленного сервера используйте [TASKS_SETUP.md](TASKS_SETUP.md).
+После настройки HTTPS откройте `https://alf-mobile-tasks.duckdns.org/health/live`, установите APK 2.2.1 и зарегистрируйте новый аккаунт. Общие задачи используют PostgreSQL; тестовые аккаунты и задачи Firebase не переносятся. Для обновления уже установленного сервера используйте [TASKS_SETUP.md](TASKS_SETUP.md).
 
 ## Сборка на компьютере разработчика
 

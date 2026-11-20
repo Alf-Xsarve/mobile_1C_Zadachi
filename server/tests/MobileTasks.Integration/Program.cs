@@ -45,7 +45,7 @@ await Execute("DROP SCHEMA IF EXISTS mobile_tasks CASCADE");
 var config = Path.Combine(output, "fixture-config.json");
 await File.WriteAllTextAsync(config, JsonSerializer.Serialize(new { Database = new {
     Host = "127.0.0.1", Port = 15439, Name = "mobile_tasks", Username = "mobile_tasks_api", Password = fixturePassword
-}, Push = new { OneCSecret = "fixture-only-webhook-secret-123456789" }}));
+}}));
 Process Start(bool migrate, string configPath)
 {
     var info = new ProcessStartInfo(dotnet) { UseShellExecute = false, CreateNoWindow = true,
@@ -222,13 +222,7 @@ try
     Check(Convert.ToInt64(await Scalar("SELECT count(*) FROM mobile_tasks.push_queue WHERE kind='common'"))>=1,"new task push persists in outbox");
     Check((await Request("POST","/api/devices",new{id=Guid.NewGuid(),token="test-device-token"})).Code==401,"device requires auth");
     Check((await Request("POST","/api/devices",new{id=Guid.NewGuid(),token="test-device-token"},tokenA)).Code==200,"register push device");
-    Check((await Request("POST","/api/integrations/1c/new-task",new{taskId=Guid.NewGuid(),source="https://example.test/base/odata/standard.odata/"})).Code==401,"webhook rejects missing key");
-    http.DefaultRequestHeaders.Add("X-OneC-Key","fixture-only-webhook-secret-123456789");
-    var webhook = new { taskId=Guid.NewGuid(),source="https://example.test/base/odata/standard.odata/" };
-    Check((await Request("POST","/api/integrations/1c/new-task",webhook)).Code==200,"authenticated 1C webhook queues push");
-    Check((await Request("POST","/api/integrations/1c/new-task",webhook)).Code==200,"1C webhook retry accepted");
-    Check(Convert.ToInt64(await Scalar("SELECT count(*) FROM mobile_tasks.push_queue WHERE kind='odata'"))==1,"1C duplicate event removed");
-    http.DefaultRequestHeaders.Remove("X-OneC-Key");
+    Check((await Request("POST","/api/integrations/1c/new-task",new{taskId=Guid.NewGuid(),source="https://example.test/base/odata/standard.odata/"})).Code==404,"1C push endpoint removed");
     api.Kill(entireProcessTree: true);
     await api.WaitForExitAsync();
     previousLogs = await apiOut + await apiErr;

@@ -125,7 +125,7 @@ app.MapGet("/health/schema", async (HttpContext context, Schema schema) =>
 });
 app.MapGet("/health/push",(HttpContext context,IConfiguration configuration)=> {
  if(!IsLocal(context))return Results.NotFound();
- return Results.Ok(new { configured=File.Exists(configuration["Push:ServiceAccountFile"]),oneCConfigured=(configuration["Push:OneCSecret"]?.Length??0)>=32 });
+ return Results.Ok(new { configured=File.Exists(configuration["Push:ServiceAccountFile"]) });
 });
 app.MapTaskApi();
 PushService.Map(app);

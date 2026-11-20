@@ -14,7 +14,6 @@ class MainActivity : Activity() {
     private var shown: String? = null
     private var pushStarted = false
     private var notificationPermissionAsked = false
-    private var pushSources = ""
     private var fileTask: String? = null
     private var savingFile: Pair<String, String>? = null
 
@@ -254,20 +253,17 @@ class MainActivity : Activity() {
         if (isFinishing || isDestroyed) return
         if (!state.boot && state.user != null)
             intent.getStringExtra("push_kind")?.let { kind ->
-                val cloud=state.cloud
-                if(cloud.busy || cloud.files.busy || cloud.links.busy || cloud.draft!=null)return@let
+                val cloud = state.cloud
+                if (cloud.busy || cloud.files.busy || cloud.links.busy || cloud.draft != null)
+                    return@let
                 intent.removeExtra("push_kind")
-                state.page = if (kind == "odata") "home" else "cloud"
-                if(kind=="odata")window.decorView.post{state.refresh()}
-                else {cloud.selectedId=null;window.decorView.post{cloud.listen()}}
+                if (kind == "common") {
+                    state.page = "cloud"
+                    cloud.selectedId = null
+                    window.decorView.post { cloud.listen() }
+                }
             }
-        val sourceSignature = state.sources.filter { it.enabled }.joinToString { it.url }
-        if (
-            state.cloud.account != null &&
-                !state.boot &&
-                (!pushStarted || pushSources != sourceSignature)
-        ) {
-            pushSources = sourceSignature
+        if (state.cloud.account != null && !state.boot && !pushStarted) {
             pushStarted = true
             kg.devtasks.app.data.TaskMessaging.start(applicationContext)
             if (
